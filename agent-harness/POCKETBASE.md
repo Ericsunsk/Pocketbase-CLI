@@ -17,6 +17,7 @@ Harness path: `<repo-root>/agent-harness`
 - Session config persistence plus `undo`/`redo` for remote defaults
 - Remote auth session persistence with saved base URL, token, and current record
 - stdin-first JSON input flows via `--file`, `--file -`, and `--stdin-json`
+- direct binary file uploads on record create/update/upsert via repeatable `--binary-file field=path`
 - secret-safe auth via `auth login --password-stdin`
 - explicit guardrails on destructive or side-effectful commands via `--yes`
 - pagination helpers via `--all`

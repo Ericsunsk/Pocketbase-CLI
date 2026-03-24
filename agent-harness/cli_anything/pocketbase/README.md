@@ -34,6 +34,7 @@ cli-anything-pocketbase
 - `schema --json` and `schema <command path> --json` expose a machine-readable command contract
 - Stable JSON envelope with `meta`, `result`, `error`, `http`, and `pagination`
 - stdin-first JSON inputs with `--file`, `--file -`, and `--stdin-json`
+- direct record file uploads with repeatable `--binary-file field=path`
 - secret-safe auth input with `auth login --password-stdin`
 - explicit destructive-operation guardrails via `--yes`
 - pagination helpers via `--all`
@@ -163,6 +164,15 @@ printf '{"requests":[{"method":"POST","url":"/api/collections/users/records","bo
 ```sh
 printf 'Secret123\n' | cli-anything-pocketbase auth login --password-stdin admin@example.com
 ```
+
+Record create/update/upsert can upload binary files directly:
+
+```sh
+cli-anything-pocketbase records update users RECORD_ID --data '{"name":"With avatar"}' --binary-file avatar=./avatar.png
+cli-anything-pocketbase records upsert users --filter 'email="a@example.com"' --binary-file avatar=./avatar.png
+```
+
+`--binary-file` is repeatable and accepts raw PocketBase file field keys, including modifiers like `field+` for append.
 
 ## Safety Rails
 

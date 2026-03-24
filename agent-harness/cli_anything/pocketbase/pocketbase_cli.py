@@ -44,6 +44,9 @@ _SCHEMA_EXAMPLES: dict[str, list[str]] = {
     "records list": ["cli-anything-pocketbase --json records list users --per-page 20"],
     "records find": ["cli-anything-pocketbase --json records find users --filter 'email=\"test@example.com\"' --first"],
     "records upsert": ["cli-anything-pocketbase --json records upsert users --filter 'email=\"sync@example.com\"' --file upsert.json"],
+    "records update with binary": [
+        "cli-anything-pocketbase --json records update users RECORD_ID --data '{\"name\":\"Updated\"}' --binary-file avatar=./avatar.png"
+    ],
     "records delete": ["cli-anything-pocketbase --json records delete users RECORD_ID --yes"],
     "records delete-by-filter": [
         "cli-anything-pocketbase --json records delete-by-filter users --filter 'status=\"inactive\"' --expect-count 3 --yes"
@@ -113,8 +116,14 @@ _REPL_USAGE_MESSAGES = {
     ),
     "records.list": "Usage: records list <collection> [--page N] [--per-page N] [--filter X] [--sort X] [--fields X] [--expand X] [--all]",
     "records.get": "Usage: records get <collection> <record_id> [--fields X] [--expand X]",
-    "records.create": "Usage: records create <collection> (--data '{...}' | --file record.json | --file - | --stdin-json)",
-    "records.update": "Usage: records update <collection> <record_id> (--data '{...}' | --file record.json | --file - | --stdin-json)",
+    "records.create": (
+        "Usage: records create <collection> (--data '{...}' | --file record.json | --file - | --stdin-json) "
+        "[--binary-file field=path ...]"
+    ),
+    "records.update": (
+        "Usage: records update <collection> <record_id> (--data '{...}' | --file record.json | --file - | --stdin-json) "
+        "[--binary-file field=path ...]"
+    ),
     "records.summary": (
         "Usage: records auth-methods <collection> | "
         "records auth-password <collection> <identity> <password> [--identity-field X] [--fields X] [--expand X] [--mfa-id X] [--no-save] | "
@@ -131,11 +140,11 @@ _REPL_USAGE_MESSAGES = {
         "records impersonate <collection> <record_id> [--duration N] [--fields X] [--expand X] [--no-save] | "
         "records list <collection> [--page N] [--per-page N] [--filter X] [--sort X] [--fields X] [--expand X] [--all] | "
         "records get <collection> <record_id> [--fields X] [--expand X] | "
-        "records create <collection> (--data '{...}' | --file record.json | --file - | --stdin-json) | "
-        "records update <collection> <record_id> (--data '{...}' | --file record.json | --file - | --stdin-json) | "
+        "records create <collection> (--data '{...}' | --file record.json | --file - | --stdin-json) [--binary-file field=path ...] | "
+        "records update <collection> <record_id> (--data '{...}' | --file record.json | --file - | --stdin-json) [--binary-file field=path ...] | "
         "records delete <collection> <record_id> --yes | "
         "records find <collection> --filter X [--first] [--per-page N] [--sort X] [--fields X] [--expand X] | "
-        "records upsert <collection> --filter X (--data '{...}' | --file record.json | --file - | --stdin-json) [--first] [--fields X] [--expand X] | "
+        "records upsert <collection> --filter X (--data '{...}' | --file record.json | --file - | --stdin-json) [--binary-file field=path ...] [--first] [--fields X] [--expand X] | "
         "records delete-by-filter <collection> --filter X [--expect-count N] --yes"
     ),
     "files.group": "Usage: files <token|url> ...",
@@ -638,6 +647,55 @@ def _load_optional_json_object_input(
     if raw is None:
         return None
     return _parse_json_object(raw)
+
+
+def _parse_binary_file_inputs(
+    *,
+    binary_files: tuple[str, ...],
+    action: str,
+) -> list[tuple[str, Path]]:
+    parsed: list[tuple[str, Path]] = []
+    for item in binary_files:
+        if "=" not in item:
+            raise ValueError(f"{action} expected `--binary-file` in `<field>=<path>` format.")
+        field_name_raw, path_raw = item.split("=", 1)
+        field_name = field_name_raw.strip()
+        path_value = path_raw.strip()
+        if not field_name:
+            raise ValueError(f"{action} expected `--binary-file` field name in `<field>=<path>` format.")
+        if not path_value:
+            raise ValueError(f"{action} expected `--binary-file` path in `<field>=<path>` format.")
+
+        file_path = Path(path_value).expanduser()
+        if not file_path.exists():
+            raise ValueError(f"{action} binary file does not exist: {file_path}")
+        if not file_path.is_file():
+            raise ValueError(f"{action} binary upload path is not a file: {file_path}")
+        parsed.append((field_name, file_path))
+
+    return parsed
+
+
+def _load_record_mutation_input(
+    *,
+    data: str | None,
+    file_path: str | None,
+    stdin_json: bool,
+    binary_files: tuple[str, ...],
+    action: str,
+) -> tuple[dict[str, Any], list[tuple[str, Path]]]:
+    body = _load_optional_json_object_input(
+        data=data,
+        file_path=file_path,
+        stdin_json=stdin_json,
+        action=action,
+    )
+    parsed_binary_files = _parse_binary_file_inputs(binary_files=binary_files, action=action)
+
+    if body is None and not parsed_binary_files:
+        raise ValueError(f"{action} requires JSON input (`--data`, `--file`, `--stdin-json`) or at least one `--binary-file`.")
+
+    return body or {}, parsed_binary_files
 
 
 def _parse_collections_import_payload(payload: dict[str, Any]) -> dict[str, Any]:
@@ -2404,21 +2462,29 @@ def _handle_records_create(
     data: str | None,
     file_path: str | None,
     stdin_json: bool = False,
+    binary_files: tuple[str, ...] = (),
     record_history: bool = True,
 ) -> None:
     if record_history:
+        history_parts = ["records", "create", collection]
         if file_path == "-":
-            _record_command(ctx, f"records create {collection} --file -")
+            history_parts.extend(["--file", "-"])
         elif stdin_json:
-            _record_command(ctx, f"records create {collection} --stdin-json")
-        else:
-            _record_command(ctx, f"records create {collection} --data <json>" if data else f"records create {collection} --file <path>")
+            history_parts.append("--stdin-json")
+        elif data:
+            history_parts.extend(["--data", "<json>"])
+        elif file_path:
+            history_parts.extend(["--file", "<path>"])
+        for _ in binary_files:
+            history_parts.extend(["--binary-file", "<field=path>"])
+        _record_command(ctx, " ".join(history_parts))
 
     try:
-        body = _load_json_object_input(
+        body, parsed_binary_files = _load_record_mutation_input(
             data=data,
             file_path=file_path,
             stdin_json=stdin_json,
+            binary_files=binary_files,
             action="records.create",
         )
     except ValueError as exc:
@@ -2433,7 +2499,11 @@ def _handle_records_create(
         ctx,
         action="records.create",
         success_message="Record create completed",
-        operation=lambda client: client.records_create(collection=collection, body=body),
+        operation=(
+            (lambda client: client.records_create_with_files(collection=collection, body=body, file_fields=parsed_binary_files))
+            if parsed_binary_files
+            else (lambda client: client.records_create(collection=collection, body=body))
+        ),
     )
 
 
@@ -2445,26 +2515,29 @@ def _handle_records_update(
     data: str | None,
     file_path: str | None,
     stdin_json: bool = False,
+    binary_files: tuple[str, ...] = (),
     record_history: bool = True,
 ) -> None:
     if record_history:
+        history_parts = ["records", "update", collection, record_id]
         if file_path == "-":
-            _record_command(ctx, f"records update {collection} {record_id} --file -")
+            history_parts.extend(["--file", "-"])
         elif stdin_json:
-            _record_command(ctx, f"records update {collection} {record_id} --stdin-json")
-        else:
-            _record_command(
-                ctx,
-                f"records update {collection} {record_id} --data <json>"
-                if data
-                else f"records update {collection} {record_id} --file <path>",
-            )
+            history_parts.append("--stdin-json")
+        elif data:
+            history_parts.extend(["--data", "<json>"])
+        elif file_path:
+            history_parts.extend(["--file", "<path>"])
+        for _ in binary_files:
+            history_parts.extend(["--binary-file", "<field=path>"])
+        _record_command(ctx, " ".join(history_parts))
 
     try:
-        body = _load_json_object_input(
+        body, parsed_binary_files = _load_record_mutation_input(
             data=data,
             file_path=file_path,
             stdin_json=stdin_json,
+            binary_files=binary_files,
             action="records.update",
         )
     except ValueError as exc:
@@ -2479,7 +2552,18 @@ def _handle_records_update(
         ctx,
         action="records.update",
         success_message="Record update completed",
-        operation=lambda client: client.records_update(collection=collection, record_id=record_id, body=body),
+        operation=(
+            (
+                lambda client: client.records_update_with_files(
+                    collection=collection,
+                    record_id=record_id,
+                    body=body,
+                    file_fields=parsed_binary_files,
+                )
+            )
+            if parsed_binary_files
+            else (lambda client: client.records_update(collection=collection, record_id=record_id, body=body))
+        ),
     )
 
 
@@ -2591,6 +2675,7 @@ def _handle_records_upsert(
     data: str | None,
     file_path: str | None,
     stdin_json: bool,
+    binary_files: tuple[str, ...] = (),
     first: bool,
     fields: str | None,
     expand: str | None,
@@ -2604,8 +2689,12 @@ def _handle_records_upsert(
             history_parts.append("--stdin-json")
         elif file_path:
             history_parts.extend(["--file", file_path])
-        else:
+        elif data:
             history_parts.extend(["--data", "<json>"])
+        elif not binary_files:
+            history_parts.extend(["--data", "<json>"])
+        for _ in binary_files:
+            history_parts.extend(["--binary-file", "<field=path>"])
         if first:
             history_parts.append("--first")
         if fields:
@@ -2615,10 +2704,11 @@ def _handle_records_upsert(
         _record_command(ctx, " ".join(history_parts))
 
     try:
-        body = _load_json_object_input(
+        body, parsed_binary_files = _load_record_mutation_input(
             data=data,
             file_path=file_path,
             stdin_json=stdin_json,
+            binary_files=binary_files,
             action="records.upsert",
         )
     except ValueError as exc:
@@ -2645,7 +2735,10 @@ def _handle_records_upsert(
         matched_count = lookup_payload.get("totalItems", len(matched_items))
 
         if matched_count == 0:
-            result = client.records_create(collection=collection, body=body)
+            if parsed_binary_files:
+                result = client.records_create_with_files(collection=collection, body=body, file_fields=parsed_binary_files)
+            else:
+                result = client.records_create(collection=collection, body=body)
             operation = "create"
         else:
             if matched_count != 1 and not first:
@@ -2672,7 +2765,15 @@ def _handle_records_upsert(
                     message="Matched record did not include a usable `id`.",
                 )
                 return
-            result = client.records_update(collection=collection, record_id=target_id, body=body)
+            if parsed_binary_files:
+                result = client.records_update_with_files(
+                    collection=collection,
+                    record_id=target_id,
+                    body=body,
+                    file_fields=parsed_binary_files,
+                )
+            else:
+                result = client.records_update(collection=collection, record_id=target_id, body=body)
             operation = "update"
     except PocketBaseRemoteError as exc:
         _handle_remote_error(ctx, action="records.upsert", error=exc)
@@ -3946,6 +4047,12 @@ def records_get_command(
 @click.option("--data", default=None, help="JSON object body")
 @click.option("--file", "file_path", default=None, help="Path to a JSON file or `-` to read from stdin")
 @click.option("--stdin-json", is_flag=True, help="Read the JSON object body from stdin")
+@click.option(
+    "--binary-file",
+    "binary_files",
+    multiple=True,
+    help="Repeatable file upload in `<field>=<path>` format. Field may include modifiers like `avatar+`.",
+)
 @click.pass_context
 def records_create_command(
     ctx: click.Context,
@@ -3953,8 +4060,16 @@ def records_create_command(
     data: str | None,
     file_path: str | None,
     stdin_json: bool,
+    binary_files: tuple[str, ...],
 ) -> None:
-    _handle_records_create(ctx, collection=collection, data=data, file_path=file_path, stdin_json=stdin_json)
+    _handle_records_create(
+        ctx,
+        collection=collection,
+        data=data,
+        file_path=file_path,
+        stdin_json=stdin_json,
+        binary_files=binary_files,
+    )
 
 
 @records_group.command("update")
@@ -3963,6 +4078,12 @@ def records_create_command(
 @click.option("--data", default=None, help="JSON object body")
 @click.option("--file", "file_path", default=None, help="Path to a JSON file or `-` to read from stdin")
 @click.option("--stdin-json", is_flag=True, help="Read the JSON object body from stdin")
+@click.option(
+    "--binary-file",
+    "binary_files",
+    multiple=True,
+    help="Repeatable file upload in `<field>=<path>` format. Field may include modifiers like `avatar+`.",
+)
 @click.pass_context
 def records_update_command(
     ctx: click.Context,
@@ -3971,6 +4092,7 @@ def records_update_command(
     data: str | None,
     file_path: str | None,
     stdin_json: bool,
+    binary_files: tuple[str, ...],
 ) -> None:
     _handle_records_update(
         ctx,
@@ -3979,6 +4101,7 @@ def records_update_command(
         data=data,
         file_path=file_path,
         stdin_json=stdin_json,
+        binary_files=binary_files,
     )
 
 
@@ -4028,6 +4151,12 @@ def records_find_command(
 @click.option("--data", default=None, help="JSON object body")
 @click.option("--file", "file_path", default=None, help="Path to a JSON file or `-` to read from stdin")
 @click.option("--stdin-json", is_flag=True, help="Read the JSON object body from stdin")
+@click.option(
+    "--binary-file",
+    "binary_files",
+    multiple=True,
+    help="Repeatable file upload in `<field>=<path>` format. Field may include modifiers like `avatar+`.",
+)
 @click.option("--first", is_flag=True, help="Update the first matched record when the filter matches multiple records")
 @click.option("--fields", default=None)
 @click.option("--expand", default=None)
@@ -4039,6 +4168,7 @@ def records_upsert_command(
     data: str | None,
     file_path: str | None,
     stdin_json: bool,
+    binary_files: tuple[str, ...],
     first: bool,
     fields: str | None,
     expand: str | None,
@@ -4050,6 +4180,7 @@ def records_upsert_command(
         data=data,
         file_path=file_path,
         stdin_json=stdin_json,
+        binary_files=binary_files,
         first=first,
         fields=fields,
         expand=expand,

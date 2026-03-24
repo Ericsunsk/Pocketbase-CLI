@@ -523,6 +523,26 @@ class PocketBaseRemoteClient:
             require_auth=True,
         )
 
+    def records_create_with_files(
+        self,
+        *,
+        collection: str,
+        body: dict[str, Any],
+        file_fields: list[tuple[str, str | Path]],
+    ) -> RemoteResult:
+        normalized_files = [(field_name, Path(file_path)) for field_name, file_path in file_fields]
+        data_bytes, content_type = self._build_multipart_form_body(
+            fields=body,
+            file_fields=normalized_files,
+        )
+        return self._request_raw(
+            "POST",
+            self._collection_path(collection, "records"),
+            data_bytes=data_bytes,
+            extra_headers={"Content-Type": content_type},
+            require_auth=True,
+        )
+
     def records_update(
         self,
         *,
@@ -534,6 +554,27 @@ class PocketBaseRemoteClient:
             "PATCH",
             self._record_path(collection, record_id),
             body=body,
+            require_auth=True,
+        )
+
+    def records_update_with_files(
+        self,
+        *,
+        collection: str,
+        record_id: str,
+        body: dict[str, Any],
+        file_fields: list[tuple[str, str | Path]],
+    ) -> RemoteResult:
+        normalized_files = [(field_name, Path(file_path)) for field_name, file_path in file_fields]
+        data_bytes, content_type = self._build_multipart_form_body(
+            fields=body,
+            file_fields=normalized_files,
+        )
+        return self._request_raw(
+            "PATCH",
+            self._record_path(collection, record_id),
+            data_bytes=data_bytes,
+            extra_headers={"Content-Type": content_type},
             require_auth=True,
         )
 
@@ -877,6 +918,54 @@ class PocketBaseRemoteClient:
             f"--{boundary}--\r\n".encode("utf-8"),
         ]
         return b"".join(chunks), f"multipart/form-data; boundary={boundary}"
+
+    @staticmethod
+    def _build_multipart_form_body(
+        *,
+        fields: dict[str, Any],
+        file_fields: list[tuple[str, Path]],
+    ) -> tuple[bytes, str]:
+        boundary = f"----cli-anything-pocketbase-{secrets.token_hex(12)}"
+        chunks: list[bytes] = []
+
+        for field_name, value in fields.items():
+            for rendered_value in PocketBaseRemoteClient._coerce_form_values(value):
+                chunks.extend(
+                    [
+                        f"--{boundary}\r\n".encode("utf-8"),
+                        f'Content-Disposition: form-data; name="{field_name}"\r\n\r\n'.encode("utf-8"),
+                        rendered_value.encode("utf-8"),
+                        b"\r\n",
+                    ]
+                )
+
+        for field_name, file_path in file_fields:
+            content_type = mimetypes.guess_type(file_path.name)[0] or "application/octet-stream"
+            file_bytes = file_path.read_bytes()
+            chunks.extend(
+                [
+                    f"--{boundary}\r\n".encode("utf-8"),
+                    (
+                        f'Content-Disposition: form-data; name="{field_name}"; filename="{file_path.name}"\r\n'
+                    ).encode("utf-8"),
+                    f"Content-Type: {content_type}\r\n\r\n".encode("utf-8"),
+                    file_bytes,
+                    b"\r\n",
+                ]
+            )
+
+        chunks.append(f"--{boundary}--\r\n".encode("utf-8"))
+        return b"".join(chunks), f"multipart/form-data; boundary={boundary}"
+
+    @staticmethod
+    def _coerce_form_values(value: Any) -> list[str]:
+        if value is None:
+            return []
+        if isinstance(value, bool):
+            return ["true" if value else "false"]
+        if isinstance(value, (str, int, float)):
+            return [str(value)]
+        return [json.dumps(value)]
 
     def _build_url(self, path: str, query: dict[str, Any] | None = None) -> str:
         normalized_path = path if path.startswith("/") else f"/{path}"

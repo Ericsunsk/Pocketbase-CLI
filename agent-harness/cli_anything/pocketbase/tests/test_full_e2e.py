@@ -213,6 +213,106 @@ class _PocketBaseRemoteHandler(BaseHTTPRequestHandler):
 
         return json.loads(raw)
 
+    def _read_body_bytes(self) -> bytes:
+        content_length = int(self.headers.get("Content-Length", "0"))
+        if content_length <= 0:
+            return b""
+        return self.rfile.read(content_length)
+
+    def _read_multipart_form(self) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
+        content_type = self.headers.get("Content-Type", "")
+        boundary_match = re.search(r"boundary=([^;]+)", content_type)
+        if "multipart/form-data" not in content_type or not boundary_match:
+            raise ValueError(_VALIDATION_ERROR_MESSAGE)
+
+        boundary = boundary_match.group(1).strip().strip('"').encode("utf-8")
+        raw = self._read_body_bytes()
+        text_fields: dict[str, list[str]] = {}
+        file_fields: dict[str, list[str]] = {}
+
+        for part in raw.split(b"--" + boundary):
+            normalized = part.strip()
+            if not normalized or normalized == b"--":
+                continue
+
+            normalized = normalized.strip(b"\r\n")
+            if not normalized or normalized == b"--":
+                continue
+
+            if b"\r\n\r\n" not in normalized:
+                continue
+
+            header_bytes, body = normalized.split(b"\r\n\r\n", 1)
+            body = body.rsplit(b"\r\n", 1)[0]
+
+            name_match = re.search(rb'name="([^"]+)"', header_bytes)
+            if not name_match:
+                continue
+
+            field_name = name_match.group(1).decode("utf-8", errors="replace")
+            filename_match = re.search(rb'filename="([^"]+)"', header_bytes)
+            if filename_match:
+                filename = filename_match.group(1).decode("utf-8", errors="replace")
+                file_fields.setdefault(field_name, []).append(filename)
+            else:
+                value = body.decode("utf-8", errors="replace")
+                text_fields.setdefault(field_name, []).append(value)
+
+        return text_fields, file_fields
+
+    @staticmethod
+    def _decode_form_value(raw: str) -> object:
+        stripped = raw.strip()
+        if not stripped:
+            return ""
+        try:
+            return json.loads(stripped)
+        except json.JSONDecodeError:
+            return raw
+
+    @staticmethod
+    def _normalize_file_values(value: object) -> list[str]:
+        if value is None:
+            return []
+        if isinstance(value, list):
+            return [str(item) for item in value]
+        return [str(value)]
+
+    def _apply_multipart_record_mutations(
+        self,
+        *,
+        record: dict[str, object],
+        text_fields: dict[str, list[str]],
+        file_fields: dict[str, list[str]],
+    ) -> None:
+        for field_name, values in text_fields.items():
+            if field_name.endswith("-"):
+                target_field = field_name[:-1]
+                current_values = self._normalize_file_values(record.get(target_field))
+                targets: list[str] = []
+                for raw_value in values:
+                    decoded = self._decode_form_value(raw_value)
+                    if isinstance(decoded, list):
+                        targets.extend(str(item) for item in decoded)
+                    else:
+                        targets.append(str(decoded))
+                target_set = set(targets)
+                record[target_field] = [item for item in current_values if item not in target_set]
+                continue
+
+            decoded_values = [self._decode_form_value(raw_value) for raw_value in values]
+            record[field_name] = decoded_values[0] if len(decoded_values) == 1 else decoded_values
+
+        for field_name, filenames in file_fields.items():
+            if field_name.endswith("+"):
+                target_field = field_name[:-1]
+                current_values = self._normalize_file_values(record.get(target_field))
+                current_values.extend(filenames)
+                record[target_field] = current_values
+                continue
+
+            record[field_name] = filenames[0] if len(filenames) == 1 else filenames
+
     def _write_json(self, status: int, payload: object) -> None:
         body = json.dumps(payload).encode("utf-8")
         self.send_response(status)
@@ -507,6 +607,26 @@ class _PocketBaseRemoteHandler(BaseHTTPRequestHandler):
             self.fixture.backups.append(filename)
             self.fixture.backup_content[filename] = file_bytes
             self._write_empty(204)
+            return
+
+        if path == "/api/collections/users/records" and "multipart/form-data" in self.headers.get("Content-Type", ""):
+            if not self._require_auth():
+                return
+            try:
+                text_fields, file_fields = self._read_multipart_form()
+            except ValueError:
+                self._write_json(400, {"message": _VALIDATION_ERROR_MESSAGE})
+                return
+
+            record_id = self.fixture.next_record_id()
+            record: dict[str, object] = {"id": record_id}
+            self._apply_multipart_record_mutations(
+                record=record,
+                text_fields=text_fields,
+                file_fields=file_fields,
+            )
+            self.fixture.records[record_id] = record
+            self._write_json(200, record)
             return
 
         payload = self._read_json()
@@ -881,7 +1001,7 @@ class _PocketBaseRemoteHandler(BaseHTTPRequestHandler):
             if not self._require_auth():
                 return
             record_id = self.fixture.next_record_id()
-            record = {"id": record_id, **payload}
+            record: dict[str, object] = {"id": record_id, **payload}
             self.fixture.records[record_id] = record
             self._write_json(200, record)
             return
@@ -932,7 +1052,19 @@ class _PocketBaseRemoteHandler(BaseHTTPRequestHandler):
             self._write_json(404, {"message": "Record not found"})
             return
 
-        record.update(self._read_json())
+        if "multipart/form-data" in self.headers.get("Content-Type", ""):
+            try:
+                text_fields, file_fields = self._read_multipart_form()
+            except ValueError:
+                self._write_json(400, {"message": _VALIDATION_ERROR_MESSAGE})
+                return
+            self._apply_multipart_record_mutations(
+                record=record,
+                text_fields=text_fields,
+                file_fields=file_fields,
+            )
+        else:
+            record.update(self._read_json())
         self._write_json(200, record)
 
     def do_PUT(self) -> None:  # noqa: N802
@@ -1342,6 +1474,75 @@ class FullE2ETests(unittest.TestCase):
         )
         listed_again_ids = [item["id"] for item in listed_again_payload["data"]["data"]["items"]]
         self.assertNotIn(record_id, listed_again_ids)
+
+    def test_remote_records_binary_uploads(self) -> None:
+        self.authenticate_superuser()
+
+        avatar1 = Path(self._tmp.name) / "avatar1.png"
+        avatar1.write_bytes(b"avatar-1")
+        email = "binary@example.com"
+
+        created_payload = self.assert_cli_ok(
+            self.run_cli(
+                "--json",
+                "records",
+                "create",
+                "users",
+                "--data",
+                json.dumps({"email": email, "name": "Binary User"}),
+                "--binary-file",
+                f"avatar={avatar1}",
+            ),
+            action="records.create",
+        )
+        created_record = created_payload["data"]["data"]
+        record_id = created_record["id"]
+        self.assertEqual(created_record["avatar"], avatar1.name)
+
+        avatar2 = Path(self._tmp.name) / "avatar2.webp"
+        avatar2.write_bytes(b"avatar-2")
+        updated_payload = self.assert_cli_ok(
+            self.run_cli(
+                "--json",
+                "records",
+                "update",
+                "users",
+                record_id,
+                "--data",
+                json.dumps({"name": "Binary Updated"}),
+                "--binary-file",
+                f"avatar={avatar2}",
+            ),
+            action="records.update",
+        )
+        self.assertEqual(updated_payload["data"]["data"]["name"], "Binary Updated")
+        self.assertEqual(updated_payload["data"]["data"]["avatar"], avatar2.name)
+
+        avatar3 = Path(self._tmp.name) / "avatar3.avif"
+        avatar3.write_bytes(b"avatar-3")
+        upsert_payload = self.assert_cli_ok(
+            self.run_cli(
+                "--json",
+                "records",
+                "upsert",
+                "users",
+                "--filter",
+                f'email="{email}"',
+                "--first",
+                "--binary-file",
+                f"avatar+={avatar3}",
+            ),
+            action="records.upsert",
+        )
+        upsert_result = self.extract_result(upsert_payload)
+        self.assertIsInstance(upsert_result, dict)
+        self.assertEqual(upsert_result.get("operation"), "update")
+        upsert_data = upsert_result.get("data")
+        self.assertIsInstance(upsert_data, dict)
+        avatar_value = upsert_data.get("avatar")
+        self.assertIsInstance(avatar_value, list)
+        self.assertIn(avatar2.name, avatar_value)
+        self.assertIn(avatar3.name, avatar_value)
 
     def test_remote_record_auth_flows_and_impersonate(self) -> None:
         self.assert_cli_ok(self.configure_remote_base_url(), action="config.set")
