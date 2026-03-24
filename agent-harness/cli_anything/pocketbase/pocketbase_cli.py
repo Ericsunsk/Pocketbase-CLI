@@ -61,7 +61,7 @@ _SCHEMA_EXAMPLES: dict[str, list[str]] = {
 _REPL_USAGE_MESSAGES = {
     "root": "Usage: settings|logs|crons|collections|records|batch|files|backups|raw ...",
     "auth.group": "Usage: auth <login|logout|status|whoami|refresh> ...",
-    "auth.login": "Usage: auth login [--base-url <url>] [--collection <name>] [--password-stdin] <identity> [password]",
+    "auth.login": "Usage: auth login [--base-url <url>] [--collection <name>] [--password-stdin] [identity] [password]",
     "settings.group": "Usage: settings <get|patch|test-s3|test-email|apple-client-secret> ...",
     "settings.patch": "Usage: settings patch (--data '{...}' | --file settings.json | --file - | --stdin-json)",
     "settings.summary": (
@@ -567,6 +567,15 @@ def _read_secret_from_stdin(*, action: str) -> str:
     return value
 
 
+def _prompt_login_text(
+    *,
+    label: str,
+    hide_input: bool = False,
+) -> str:
+    rendered = click.prompt(label, show_default=False, hide_input=hide_input)
+    return str(rendered).strip()
+
+
 def _load_text_input(
     *,
     data: str | None,
@@ -716,10 +725,13 @@ def _parse_batch_payload(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def _handle_remote_error(ctx: click.Context, *, action: str, error: PocketBaseRemoteError) -> None:
+    message = str(error)
+    if action == "auth.login" and not message.lower().startswith("remote auth login failed"):
+        message = f"Remote auth login failed: {message}"
     emit_error(
         json_output=ctx.obj["json_output"],
         action=action,
-        message=str(error),
+        message=message,
         code=error.status or 1,
         data=error.to_dict(),
     )
@@ -1087,7 +1099,7 @@ def _handle_auth_login(
         collection=resolved_collection,
     ):
         return
-    _render_remote_result(ctx, action="auth.login", result=result, success_message="Remote auth login completed")
+    _render_remote_result(ctx, action="auth.login", result=result, success_message="Remote auth login successful")
 
 
 def _auth_status_payload(ctx: click.Context) -> dict[str, Any]:
@@ -1102,15 +1114,37 @@ def _auth_status_payload(ctx: click.Context) -> dict[str, Any]:
     }
 
 
-def _handle_auth_logout(ctx: click.Context, *, record_history: bool = True) -> None:
+def _handle_auth_logout(
+    ctx: click.Context,
+    *,
+    yes: bool = False,
+    record_history: bool = True,
+) -> None:
+    if not yes and not ctx.obj["json_output"]:
+        confirmed = click.confirm("Confirm logout?", default=True)
+        if not confirmed:
+            emit_success(
+                json_output=ctx.obj["json_output"],
+                action="auth.logout",
+                message="Remote auth logout cancelled",
+                data={
+                    "authenticated": ctx.obj["state"].has_remote_auth(),
+                    "cancelled": True,
+                },
+            )
+            return
+
     if record_history:
-        _record_command(ctx, "auth logout")
+        history_parts = ["auth", "logout"]
+        if yes:
+            history_parts.append("--yes")
+        _record_command(ctx, " ".join(history_parts))
     ctx.obj["state"].clear_remote_auth()
     _save_state(ctx)
     emit_success(
         json_output=ctx.obj["json_output"],
         action="auth.logout",
-        message="Remote auth cleared",
+        message="Remote auth logout successful",
         data={"authenticated": False},
     )
 
@@ -3249,7 +3283,7 @@ def auth_group() -> None:
 @click.option("--base-url", default=None, help="PocketBase base URL, for example https://pb.example.com")
 @click.option("--collection", default=None, help="Auth collection to use, defaults to config auth_collection or _superusers")
 @click.option("--password-stdin", is_flag=True, help="Read the password from stdin instead of argv")
-@click.argument("identity")
+@click.argument("identity", required=False)
 @click.argument("password", required=False)
 @click.pass_context
 def auth_login_command(
@@ -3257,9 +3291,39 @@ def auth_login_command(
     base_url: str | None,
     collection: str | None,
     password_stdin: bool,
-    identity: str,
+    identity: str | None,
     password: str | None,
 ) -> None:
+    interactive_mode = not ctx.obj["json_output"] and (identity is None or (password is None and not password_stdin))
+
+    if interactive_mode:
+        try:
+            if base_url is None:
+                base_url = _prompt_login_text(label="PocketBase base URL")
+            if identity is None:
+                identity = _prompt_login_text(label="Identity (email)")
+            if not password_stdin and password is None:
+                password = _prompt_login_text(label="Password", hide_input=True)
+        except (click.Abort, EOFError):
+            emit_error(
+                json_output=ctx.obj["json_output"],
+                action="auth.login",
+                message="Remote auth login failed: interactive input cancelled.",
+                error_type="invalid_input",
+            )
+            return
+
+    if identity is None or not identity.strip():
+        emit_error(
+            json_output=ctx.obj["json_output"],
+            action="auth.login",
+            message="auth login requires an identity (for example admin@example.com).",
+            error_type="invalid_input",
+            hint="Use `auth login <identity> --password-stdin` for automation-safe input, or run `auth login` for interactive prompts.",
+        )
+        return
+    identity = identity.strip()
+
     if password_stdin:
         if password is not None:
             emit_error(
@@ -3285,7 +3349,7 @@ def auth_login_command(
             action="auth.login",
             message="auth login requires a password argument or `--password-stdin`.",
             error_type="invalid_input",
-            hint="Use `auth login <identity> --password-stdin` for automation-safe input.",
+            hint="Use `auth login <identity> --password-stdin` for automation-safe input, or run `auth login` for interactive prompts.",
         )
         return
 
@@ -3299,9 +3363,10 @@ def auth_login_command(
 
 
 @auth_group.command("logout")
+@click.option("--yes", is_flag=True, help="Skip interactive logout confirmation")
 @click.pass_context
-def auth_logout_command(ctx: click.Context) -> None:
-    _handle_auth_logout(ctx)
+def auth_logout_command(ctx: click.Context, yes: bool) -> None:
+    _handle_auth_logout(ctx, yes=yes)
 
 
 @auth_group.command("status")

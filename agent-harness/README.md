@@ -35,6 +35,9 @@ python3 -m pip install --user --break-system-packages <repo-root>/agent-harness
 
 ```sh
 cli-anything-pocketbase --help
+cli-anything-pocketbase auth login
+cli-anything-pocketbase auth logout
+cli-anything-pocketbase auth logout --yes
 cli-anything-pocketbase config set base_url https://pb.example.com
 printf 'Secret123\n' | cli-anything-pocketbase auth login --password-stdin admin@example.com
 cli-anything-pocketbase schema --json

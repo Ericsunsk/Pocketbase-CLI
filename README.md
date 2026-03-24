@@ -46,5 +46,7 @@ If your shell cannot find the command, add one of these to `PATH`:
 
 ```sh
 cli-anything-pocketbase --help
+cli-anything-pocketbase auth login
+cli-anything-pocketbase auth logout
 cli-anything-pocketbase --json info
 ```

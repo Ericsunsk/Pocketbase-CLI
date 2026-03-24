@@ -755,13 +755,24 @@ class PocketBaseRemoteClient:
     ) -> tuple[str, int, bytes]:
         self._ensure_auth_token(method=method, path=path, query=query, require_auth=require_auth)
         url = self._build_url(path, query)
-        request = self._build_request(
-            method,
-            url=url,
-            data_bytes=data_bytes,
-            accept=accept,
-            extra_headers=extra_headers,
-        )
+        try:
+            request = self._build_request(
+                method,
+                url=url,
+                data_bytes=data_bytes,
+                accept=accept,
+                extra_headers=extra_headers,
+            )
+        except ValueError as exc:
+            raise PocketBaseRemoteError(
+                method=method.upper(),
+                url=url,
+                status=0,
+                message=f"Invalid base URL: {exc}",
+                data={
+                    "base_url": self.base_url,
+                },
+            ) from exc
 
         try:
             with urllib.request.urlopen(

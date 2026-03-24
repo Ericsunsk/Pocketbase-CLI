@@ -1897,6 +1897,68 @@ class FullE2ETests(unittest.TestCase):
         self.assertIsInstance(auth_data, dict)
         self.assertEqual(auth_data.get("token"), self.remote_fixture.initial_token)
 
+    def test_auth_login_interactive_prompts_for_missing_inputs(self) -> None:
+        completed = self.run_cli(
+            "auth",
+            "login",
+            input_text=f"{self.remote_base_url}\nadmin@example.com\nSecret123\n",
+        )
+        self.assertEqual(completed.returncode, 0, msg=completed.stderr)
+        self.assertIn("PocketBase base URL", completed.stdout)
+        self.assertIn("Identity (email)", completed.stdout)
+        self.assertIn("Remote auth login successful", completed.stdout)
+        self.assertNotIn(f"[{self.remote_base_url}]", completed.stdout)
+
+        status_payload = self.assert_cli_ok(self.run_cli("--json", "auth", "status"), action="auth.status")
+        self.assertTrue(status_payload["data"]["authenticated"])
+        self.assertEqual(status_payload["data"]["active_base_url"], self.remote_base_url)
+
+    def test_auth_login_interactive_failure_has_failed_hint(self) -> None:
+        completed = self.run_cli(
+            "auth",
+            "login",
+            input_text=f"{self.remote_base_url}\nadmin@example.com\nWrongSecret\n",
+        )
+        self.assertNotEqual(completed.returncode, 0, msg=completed.stdout)
+        self.assertIn("Remote auth login failed", completed.stderr)
+        self.assertIn(_AUTH_FAILED_MESSAGE, completed.stderr)
+
+    def test_auth_login_interactive_invalid_base_url_is_user_friendly(self) -> None:
+        completed = self.run_cli(
+            "auth",
+            "login",
+            input_text="q\nadmin@example.com\nSecret123\n",
+        )
+        self.assertNotEqual(completed.returncode, 0, msg=completed.stdout)
+        self.assertIn("Remote auth login failed: Invalid base URL", completed.stderr)
+        self.assertNotIn("Traceback", completed.stderr)
+
+    def test_auth_logout_interactive_cancel_and_confirm(self) -> None:
+        self.authenticate_superuser()
+
+        cancel = self.run_cli("auth", "logout", input_text="n\n")
+        self.assertEqual(cancel.returncode, 0, msg=cancel.stderr)
+        self.assertIn("Confirm logout?", cancel.stdout)
+        self.assertIn("Remote auth logout cancelled", cancel.stdout)
+
+        status_after_cancel = self.assert_cli_ok(self.run_cli("--json", "auth", "status"), action="auth.status")
+        self.assertTrue(status_after_cancel["data"]["authenticated"])
+
+        confirm = self.run_cli("auth", "logout", input_text="y\n")
+        self.assertEqual(confirm.returncode, 0, msg=confirm.stderr)
+        self.assertIn("Confirm logout?", confirm.stdout)
+        self.assertIn("Remote auth logout successful", confirm.stdout)
+
+        status_after_confirm = self.assert_cli_ok(self.run_cli("--json", "auth", "status"), action="auth.status")
+        self.assertFalse(status_after_confirm["data"]["authenticated"])
+
+    def test_auth_logout_yes_skips_prompt(self) -> None:
+        self.authenticate_superuser()
+        payload = self.assert_cli_ok(self.run_cli("--json", "auth", "logout", "--yes"), action="auth.logout")
+        result = self.extract_result(payload)
+        self.assertIsInstance(result, dict)
+        self.assertFalse(result.get("authenticated"))
+
     def test_settings_patch_stdin_json(self) -> None:
         self.authenticate_superuser()
         payload = self.assert_cli_ok(
