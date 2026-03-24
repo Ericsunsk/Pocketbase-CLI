@@ -49,7 +49,10 @@ _SCHEMA_EXAMPLES: dict[str, list[str]] = {
         "cli-anything-pocketbase --json records delete-by-filter users --filter 'status=\"inactive\"' --expect-count 3 --yes"
     ],
     "collections truncate": ["cli-anything-pocketbase --json collections truncate users --yes"],
-    "collections ensure": ["cli-anything-pocketbase --json collections ensure --file collection.json"],
+    "collections ensure": [
+        "cli-anything-pocketbase --json collections ensure --file collection.json",
+        "cli-anything-pocketbase --json collections ensure --file collection.json --output summary",
+    ],
     "batch run": ["cli-anything-pocketbase --json batch run --file requests.json"],
     "backups restore": ["cli-anything-pocketbase --json backups restore nightly.zip --yes"],
     "files url": ["cli-anything-pocketbase --json files url users RECORD_ID avatar.png --with-token"],
@@ -75,12 +78,12 @@ _REPL_USAGE_MESSAGES = {
     "collections.update": "Usage: collections update <name_or_id> (--data '{...}' | --file collection.json | --file - | --stdin-json)",
     "collections.ensure": (
         "Usage: collections ensure (--data '{...}' | --file collection.json | --file - | --stdin-json) "
-        "[--if-exists update|fail] [--if-missing create|fail]"
+        "[--if-exists update|fail] [--if-missing create|fail] [--output summary|full]"
     ),
     "collections.summary": (
         "Usage: collections list [--page N] [--per-page N] [--filter X] [--sort X] [--all] | "
         "collections get <name_or_id> | collections create (--data '{...}' | --file collection.json | --file - | --stdin-json) | "
-        "collections ensure (--data '{...}' | --file collection.json | --file - | --stdin-json) [--if-exists update|fail] [--if-missing create|fail] | "
+        "collections ensure (--data '{...}' | --file collection.json | --file - | --stdin-json) [--if-exists update|fail] [--if-missing create|fail] [--output summary|full] | "
         "collections update <name_or_id> (--data '{...}' | --file collection.json | --file - | --stdin-json) | "
         "collections delete <name_or_id> --yes | collections truncate <name_or_id> --yes | "
         "collections import (--data '{...}' | --file import.json | --file - | --stdin-json) | collections scaffolds"
@@ -1307,6 +1310,7 @@ def _handle_collections_ensure(
     stdin_json: bool = False,
     if_exists: str = "update",
     if_missing: str = "create",
+    output_mode: str = "full",
     record_history: bool = True,
 ) -> None:
     if record_history:
@@ -1320,6 +1324,8 @@ def _handle_collections_ensure(
             history_parts.extend(["--if-exists", if_exists])
         if if_missing != "create":
             history_parts.extend(["--if-missing", if_missing])
+        if output_mode != "full":
+            history_parts.extend(["--output", output_mode])
         _record_command(ctx, " ".join(history_parts))
 
     try:
@@ -1390,6 +1396,33 @@ def _handle_collections_ensure(
             return
         operation = "create"
 
+    result_payload = result.data if isinstance(result.data, dict) else {}
+    if output_mode == "summary":
+        summary_payload = {
+            "operation": operation,
+            "lookup_name": lookup_name,
+            "existed": matched is not None,
+            "status": result.status,
+            "collection": {
+                "id": result_payload.get("id"),
+                "name": result_payload.get("name"),
+                "type": result_payload.get("type"),
+            },
+            "field_count": len(result_payload.get("fields")) if isinstance(result_payload.get("fields"), list) else None,
+            "policies": {
+                "if_exists": if_exists,
+                "if_missing": if_missing,
+            },
+            "output": output_mode,
+        }
+        emit_success(
+            json_output=ctx.obj["json_output"],
+            action="collections.ensure",
+            message="Collection ensure completed",
+            data=summary_payload,
+        )
+        return
+
     emit_success(
         json_output=ctx.obj["json_output"],
         action="collections.ensure",
@@ -1400,6 +1433,7 @@ def _handle_collections_ensure(
             "matched": matched,
             "if_exists": if_exists,
             "if_missing": if_missing,
+            "output": output_mode,
             "data": result.data,
             "method": result.method,
             "url": result.url,
@@ -3478,6 +3512,14 @@ def collections_update_command(
     show_default=True,
     help="Behavior when the target collection name does not exist",
 )
+@click.option(
+    "--output",
+    "output_mode",
+    type=click.Choice(["summary", "full"], case_sensitive=False),
+    default="full",
+    show_default=True,
+    help="Response detail level for successful ensure operations",
+)
 @click.pass_context
 def collections_ensure_command(
     ctx: click.Context,
@@ -3486,6 +3528,7 @@ def collections_ensure_command(
     stdin_json: bool,
     if_exists: str,
     if_missing: str,
+    output_mode: str,
 ) -> None:
     _handle_collections_ensure(
         ctx,
@@ -3494,6 +3537,7 @@ def collections_ensure_command(
         stdin_json=stdin_json,
         if_exists=if_exists.lower(),
         if_missing=if_missing.lower(),
+        output_mode=output_mode.lower(),
     )
 
 

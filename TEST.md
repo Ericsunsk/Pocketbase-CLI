@@ -17,6 +17,7 @@
 - `--help` reflects the remote-only command surface
 - `schema --json` and `schema <command> --json` discoverability
 - `schema collections ensure --json` exposes ensure policy options
+- `schema collections ensure --json` exposes ensure output options
 - JSON output shape for `info`
 - JSON error envelope shape with `meta` and structured `error`
 - JSON output shape for `history`
@@ -33,6 +34,7 @@
 - Remote `collections list|get|create|update|ensure|delete|truncate|import|scaffolds`
 - Remote `collections ensure --if-exists fail`
 - Remote `collections ensure --if-missing fail`
+- Remote `collections ensure --output summary`
 - Remote `records auth-methods|auth-password|auth-oauth2|auth-refresh|request-otp|auth-otp|request-password-reset|confirm-password-reset|request-verification|confirm-verification|request-email-change|confirm-email-change|impersonate|create|get|list|update|delete`
 - Remote `records list --all`
 - Destructive command confirmations via `--yes`

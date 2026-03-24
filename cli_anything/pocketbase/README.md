@@ -38,6 +38,7 @@ cli-anything-pocketbase
 - explicit destructive-operation guardrails via `--yes`
 - pagination helpers via `--all`
 - explicit ensure policies via `--if-exists` and `--if-missing`
+- compact ensure responses via `--output summary|full`
 - filter helpers for record lookup and mutation:
   - `records find`
   - `records upsert`
@@ -183,8 +184,11 @@ For stricter agent workflows, `collections ensure` also supports:
 
 - `--if-exists update|fail`
 - `--if-missing create|fail`
+- `--output summary|full`
 
-Defaults are `update` and `create`.
+Defaults are `update`, `create`, and `full`.
+
+Use `--output summary` when the caller only needs the high-level result instead of the full remote response body.
 
 ## Examples
 
@@ -207,6 +211,7 @@ cli-anything-pocketbase collections update users --data '{"name":"users_v2"}'
 cli-anything-pocketbase collections ensure --file collection.json
 cli-anything-pocketbase collections ensure --file collection.json --if-exists fail
 cli-anything-pocketbase collections ensure --file collection.json --if-missing fail
+cli-anything-pocketbase collections ensure --file collection.json --output summary
 cli-anything-pocketbase collections truncate users --yes
 cli-anything-pocketbase collections import --file import.json
 cli-anything-pocketbase collections scaffolds

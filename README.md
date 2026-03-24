@@ -26,4 +26,5 @@ printf 'Secret123\n' | cli-anything-pocketbase auth login --password-stdin admin
 cli-anything-pocketbase schema --json
 cli-anything-pocketbase collections ensure --file collection.json
 cli-anything-pocketbase collections ensure --file collection.json --if-exists fail
+cli-anything-pocketbase collections ensure --file collection.json --output summary
 ```

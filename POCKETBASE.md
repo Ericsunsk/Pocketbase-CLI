@@ -23,6 +23,7 @@ Harness path: `/Users/apple/pocketbase/agent-harness`
 - filter helpers via `records find`, `records upsert`, and `records delete-by-filter`
 - idempotent collection provisioning via `collections ensure`
 - explicit ensure conflict policies via `--if-exists` and `--if-missing`
+- compact ensure output via `--output summary|full`
 - Best-effort `/api/health` probe in `info`
 - Canonical command surface and examples live in `cli_anything/pocketbase/README.md`
 
@@ -45,6 +46,7 @@ All operational commands use PocketBase's HTTP API against a remote deployment. 
 - `collections` now covers the documented remote collection management routes instead of only list/get.
 - `collections ensure` provides an idempotent create-or-update helper keyed by payload `name`.
 - `collections ensure` can also be tightened with `--if-exists update|fail` and `--if-missing create|fail` for stricter agent control.
+- `collections ensure --output summary` returns a compact agent-oriented result instead of the full remote body.
 - `records` now covers the major documented auth flows for auth collections, including `auth-with-oauth2`, plus higher-level `find`, `upsert`, and `delete-by-filter` helpers for agent workflows.
 - `settings` now covers the documented S3/email test routes and Apple client secret generation route.
 - `backups` wraps the remote backup list/create/delete endpoints that are relevant for deployed VPS setups.

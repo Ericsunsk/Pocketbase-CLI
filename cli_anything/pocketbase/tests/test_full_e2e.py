@@ -1884,6 +1884,7 @@ class FullE2ETests(unittest.TestCase):
         option_names = {item.get("name") for item in command_meta.get("options", []) if isinstance(item, dict)}
         self.assertIn("--if-exists", option_names)
         self.assertIn("--if-missing", option_names)
+        self.assertIn("--output", option_names)
 
     def test_auth_login_password_stdin(self) -> None:
         self.assert_cli_ok(self.configure_remote_base_url(), action="config.set")
@@ -2050,6 +2051,39 @@ class FullE2ETests(unittest.TestCase):
             action="collections.ensure",
         )
         self.assertIn("--if-missing fail", missing_payload["message"])
+
+    def test_collections_ensure_summary_output_is_compact(self) -> None:
+        self.authenticate_superuser()
+        payload = self.assert_cli_ok(
+            self.run_cli(
+                "--json",
+                "collections",
+                "ensure",
+                "--data",
+                json.dumps(
+                    {
+                        "name": "articles",
+                        "type": "base",
+                        "fields": [
+                            {"name": "title", "type": "text"},
+                            {"name": "status", "type": "select"},
+                        ],
+                    }
+                ),
+                "--output",
+                "summary",
+            ),
+            action="collections.ensure",
+        )
+        result = self.extract_result(payload)
+        self.assertIsInstance(result, dict)
+        self.assertEqual(result.get("output"), "summary")
+        self.assertEqual(result.get("operation"), "create")
+        self.assertEqual(result.get("field_count"), 2)
+        self.assertEqual(result.get("collection", {}).get("name"), "articles")
+        self.assertNotIn("data", result)
+        self.assertNotIn("matched", result)
+        self.assertNotIn("method", result)
 
     def test_records_delete_by_filter_requires_confirmation_if_available(self) -> None:
         if not self.records_subcommand_available("delete-by-filter"):
