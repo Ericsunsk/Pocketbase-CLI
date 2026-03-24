@@ -1,0 +1,6 @@
+*.pyc
+*.pyo
+__pycache__/
+.pytest_cache/
+.DS_Store
+cli_anything_pocketbase.egg-info/
