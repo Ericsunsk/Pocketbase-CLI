@@ -2,5 +2,8 @@
 *.pyo
 __pycache__/
 .pytest_cache/
+.venv/
 .DS_Store
-cli_anything_pocketbase.egg-info/
+build/
+dist/
+*.egg-info/

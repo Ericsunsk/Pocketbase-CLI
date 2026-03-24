@@ -1,8 +1,8 @@
 # PocketBase CLI-Anything Harness
 
 Target software: PocketBase
-Source path: `/Users/apple/pocketbase`
-Harness path: `/Users/apple/pocketbase/agent-harness`
+Source path: `<repo-root>`
+Harness path: `<repo-root>/agent-harness`
 
 ## What This Harness Provides
 

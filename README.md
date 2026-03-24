@@ -1,30 +1,50 @@
-# PocketBase CLI
+# PocketBase CLI-Anything Harness
 
-Remote-only CLI-Anything harness for [PocketBase](https://github.com/pocketbase/pocketbase).
+This repository follows the strict CLI-Anything Build template.
 
 ## Layout
 
-- `setup.py`: installable package entry point
-- `POCKETBASE.md`: harness scope and command surface
-- `TEST.md`: validation notes
-- `cli_anything/pocketbase/README.md`: end-user usage guide
+```text
+pocketbase/
+└── agent-harness/
+    ├── POCKETBASE.md
+    ├── setup.py
+    └── cli_anything/
+        └── pocketbase/
+            ├── README.md
+            ├── __init__.py
+            ├── __main__.py
+            ├── pocketbase_cli.py
+            ├── core/
+            ├── utils/
+            └── tests/
+```
 
 ## Install
 
 ```sh
+cd agent-harness
 python3 -m venv .venv
 . .venv/bin/activate
 python -m pip install -e .
 ```
 
+## Global Install (For LLM / Tooling)
+
+Install as a user-level command that does not depend on the current working directory:
+
+```sh
+python3 -m pip install --user --break-system-packages ./agent-harness
+```
+
+If your shell cannot find the command, add one of these to `PATH`:
+
+- `$HOME/.local/bin`
+- `$HOME/Library/Python/<python-version>/bin`
+
 ## Run
 
 ```sh
 cli-anything-pocketbase --help
-cli-anything-pocketbase config set base_url https://pb.example.com
-printf 'Secret123\n' | cli-anything-pocketbase auth login --password-stdin admin@example.com
-cli-anything-pocketbase schema --json
-cli-anything-pocketbase collections ensure --file collection.json
-cli-anything-pocketbase collections ensure --file collection.json --if-exists fail
-cli-anything-pocketbase collections ensure --file collection.json --output summary
+cli-anything-pocketbase --json info
 ```

@@ -48,7 +48,7 @@ Remote API e2e uses a local in-process stub HTTP server so tests stay determinis
 ## Validation Commands
 
 ```sh
-cd /Users/apple/pocketbase/agent-harness
+cd <repo-root>/agent-harness
 python3 -m venv .venv
 . .venv/bin/activate
 python -m pip install -e .
