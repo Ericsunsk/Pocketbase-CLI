@@ -10,10 +10,10 @@ from typing import Any
 
 import click
 
-from cli_anything.pocketbase.core.output import emit_error, emit_success
-from cli_anything.pocketbase.core.repl import PocketBaseRepl
-from cli_anything.pocketbase.core.session import SessionStore, parse_config_value
-from cli_anything.pocketbase.utils.pocketbase_remote import (
+from pocketbase_cli.core.output import emit_error, emit_success
+from pocketbase_cli.core.repl import PocketBaseRepl
+from pocketbase_cli.core.session import SessionStore, parse_config_value
+from pocketbase_cli.utils.pocketbase_remote import (
     PocketBaseRemoteClient,
     PocketBaseRemoteError,
     RemoteResult,
@@ -35,31 +35,31 @@ _FILE_TOKEN_RESPONSE_ERROR_MESSAGE = "File token response did not include a usab
 _SCHEMA_VERSION = "1.0.0"
 _DEFAULT_ALL_PER_PAGE = 200
 _SCHEMA_EXAMPLES: dict[str, list[str]] = {
-    "info": ["cli-anything-pocketbase --json info"],
+    "info": ["pocketbase-cli --json info"],
     "schema": [
-        "cli-anything-pocketbase schema --json",
-        "cli-anything-pocketbase schema records list --json",
+        "pocketbase-cli schema --json",
+        "pocketbase-cli schema records list --json",
     ],
-    "auth login": ["printf 'Secret123\\n' | cli-anything-pocketbase --json auth login --password-stdin admin@example.com"],
-    "records list": ["cli-anything-pocketbase --json records list users --per-page 20"],
-    "records find": ["cli-anything-pocketbase --json records find users --filter 'email=\"test@example.com\"' --first"],
-    "records upsert": ["cli-anything-pocketbase --json records upsert users --filter 'email=\"sync@example.com\"' --file upsert.json"],
+    "auth login": ["printf 'Secret123\\n' | pocketbase-cli --json auth login --password-stdin admin@example.com"],
+    "records list": ["pocketbase-cli --json records list users --per-page 20"],
+    "records find": ["pocketbase-cli --json records find users --filter 'email=\"test@example.com\"' --first"],
+    "records upsert": ["pocketbase-cli --json records upsert users --filter 'email=\"sync@example.com\"' --file upsert.json"],
     "records update with binary": [
-        "cli-anything-pocketbase --json records update users RECORD_ID --data '{\"name\":\"Updated\"}' --binary-file avatar=./avatar.png"
+        "pocketbase-cli --json records update users RECORD_ID --data '{\"name\":\"Updated\"}' --binary-file avatar=./avatar.png"
     ],
-    "records delete": ["cli-anything-pocketbase --json records delete users RECORD_ID --yes"],
+    "records delete": ["pocketbase-cli --json records delete users RECORD_ID --yes"],
     "records delete-by-filter": [
-        "cli-anything-pocketbase --json records delete-by-filter users --filter 'status=\"inactive\"' --expect-count 3 --yes"
+        "pocketbase-cli --json records delete-by-filter users --filter 'status=\"inactive\"' --expect-count 3 --yes"
     ],
-    "collections truncate": ["cli-anything-pocketbase --json collections truncate users --yes"],
+    "collections truncate": ["pocketbase-cli --json collections truncate users --yes"],
     "collections ensure": [
-        "cli-anything-pocketbase --json collections ensure --file collection.json",
-        "cli-anything-pocketbase --json collections ensure --file collection.json --output summary",
+        "pocketbase-cli --json collections ensure --file collection.json",
+        "pocketbase-cli --json collections ensure --file collection.json --output summary",
     ],
-    "batch run": ["cli-anything-pocketbase --json batch run --file requests.json"],
-    "backups restore": ["cli-anything-pocketbase --json backups restore nightly.zip --yes"],
-    "files url": ["cli-anything-pocketbase --json files url users RECORD_ID avatar.png --with-token"],
-    "raw": ["cli-anything-pocketbase --json raw GET /api/health"],
+    "batch run": ["pocketbase-cli --json batch run --file requests.json"],
+    "backups restore": ["pocketbase-cli --json backups restore nightly.zip --yes"],
+    "files url": ["pocketbase-cli --json files url users RECORD_ID avatar.png --with-token"],
+    "raw": ["pocketbase-cli --json raw GET /api/health"],
 }
 _REPL_USAGE_MESSAGES = {
     "root": "Usage: settings|logs|crons|collections|records|batch|files|backups|raw ...",
@@ -378,7 +378,7 @@ def _schema_contract(*, include_hidden: bool) -> dict[str, Any]:
     commands = [_format_schema_entry(entries[path]) for path in ordered_paths]
     return {
         "schema_version": _SCHEMA_VERSION,
-        "tool": "cli-anything-pocketbase",
+        "tool": "pocketbase-cli",
         "mode": "remote-only",
         "global_options": [
             {
@@ -1106,7 +1106,7 @@ def _handle_info(ctx: click.Context, *, record_history: bool = True) -> None:
     emit_success(
         json_output=ctx.obj["json_output"],
         action="info",
-        message="PocketBase remote harness info",
+        message="PocketBase remote CLI info",
         data=payload,
     )
 
@@ -3262,7 +3262,7 @@ def _handle_raw(
 @click.option("--json", "json_output", is_flag=True, help="Emit machine-readable JSON output")
 @click.pass_context
 def cli(ctx: click.Context, json_output: bool) -> None:
-    """Remote-only CLI-Anything harness for PocketBase."""
+    """Remote-only PocketBase CLI for deployed PocketBase instances."""
     ctx.obj = _build_context(json_output=json_output)
 
     if ctx.invoked_subcommand is None:

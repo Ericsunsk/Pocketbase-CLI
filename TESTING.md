@@ -1,4 +1,4 @@
-# Test Plan
+# Testing
 
 ## Unit Coverage (`test_core.py`)
 
@@ -13,7 +13,7 @@
 
 ## End-to-End Coverage (`test_full_e2e.py`)
 
-- Installed CLI command discoverability (`cli-anything-pocketbase`)
+- Installed CLI command discoverability (`pocketbase-cli`)
 - `--help` reflects the remote-only command surface
 - `schema --json` and `schema <command> --json` discoverability
 - `schema collections ensure --json` exposes ensure policy options
@@ -48,11 +48,11 @@ Remote API e2e uses a local in-process stub HTTP server so tests stay determinis
 ## Validation Commands
 
 ```sh
-cd <repo-root>/agent-harness
+cd <repo-root>
 python3 -m venv .venv
 . .venv/bin/activate
 python -m pip install -e .
-python -m unittest cli_anything.pocketbase.tests.test_core
-python -m unittest cli_anything.pocketbase.tests.test_full_e2e
-python -m unittest cli_anything.pocketbase.tests.test_core cli_anything.pocketbase.tests.test_full_e2e
+python -m unittest pocketbase_cli.tests.test_core
+python -m unittest pocketbase_cli.tests.test_full_e2e
+python -m unittest pocketbase_cli.tests.test_core pocketbase_cli.tests.test_full_e2e
 ```

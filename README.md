@@ -1,29 +1,28 @@
-# PocketBase CLI-Anything Harness
+# PocketBase CLI
 
-This repository follows the strict CLI-Anything Build template.
+This repository contains a standalone remote PocketBase CLI.
 
 ## Layout
 
 ```text
 pocketbase/
-└── agent-harness/
-    ├── POCKETBASE.md
-    ├── setup.py
-    └── cli_anything/
-        └── pocketbase/
-            ├── README.md
-            ├── __init__.py
-            ├── __main__.py
-            ├── pocketbase_cli.py
-            ├── core/
-            ├── utils/
-            └── tests/
+├── DEVELOPMENT.md
+├── FEATURES.md
+├── TESTING.md
+├── setup.py
+└── pocketbase_cli/
+    ├── README.md
+    ├── __init__.py
+    ├── __main__.py
+    ├── pocketbase_cli.py
+    ├── core/
+    ├── utils/
+    └── tests/
 ```
 
 ## Install
 
 ```sh
-cd agent-harness
 python3 -m venv .venv
 . .venv/bin/activate
 python -m pip install -e .
@@ -34,7 +33,7 @@ python -m pip install -e .
 Install as a user-level command that does not depend on the current working directory:
 
 ```sh
-python3 -m pip install --user --break-system-packages ./agent-harness
+python3 -m pip install --user --break-system-packages .
 ```
 
 If your shell cannot find the command, add one of these to `PATH`:
@@ -45,8 +44,8 @@ If your shell cannot find the command, add one of these to `PATH`:
 ## Run
 
 ```sh
-cli-anything-pocketbase --help
-cli-anything-pocketbase auth login
-cli-anything-pocketbase auth logout
-cli-anything-pocketbase --json info
+pocketbase-cli --help
+pocketbase-cli auth login
+pocketbase-cli auth logout
+pocketbase-cli --json info
 ```

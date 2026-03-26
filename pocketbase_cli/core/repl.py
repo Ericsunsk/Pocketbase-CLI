@@ -8,7 +8,7 @@ from typing import Any
 
 import click
 
-from cli_anything.pocketbase.core.session import SessionState, parse_config_value
+from pocketbase_cli.core.session import SessionState, parse_config_value
 
 ReplDispatcher = Callable[[list[str]], dict[str, Any] | None]
 StateSaver = Callable[[], None]

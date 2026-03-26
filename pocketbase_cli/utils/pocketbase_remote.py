@@ -64,7 +64,7 @@ class PocketBaseRemoteClient:
         token: str | None = None,
         collection: str = "_superusers",
         timeout: int | None = None,
-        user_agent: str = "cli-anything-pocketbase/0.1",
+        user_agent: str = "pocketbase-cli/0.1",
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.token = token
@@ -903,7 +903,7 @@ class PocketBaseRemoteClient:
         file_path: Path,
         default_content_type: str,
     ) -> tuple[bytes, str]:
-        boundary = f"----cli-anything-pocketbase-{secrets.token_hex(12)}"
+        boundary = f"----pocketbase-cli-{secrets.token_hex(12)}"
         content_type = mimetypes.guess_type(file_path.name)[0] or default_content_type
         file_bytes = file_path.read_bytes()
 
@@ -925,7 +925,7 @@ class PocketBaseRemoteClient:
         fields: dict[str, Any],
         file_fields: list[tuple[str, Path]],
     ) -> tuple[bytes, str]:
-        boundary = f"----cli-anything-pocketbase-{secrets.token_hex(12)}"
+        boundary = f"----pocketbase-cli-{secrets.token_hex(12)}"
         chunks: list[bytes] = []
 
         for field_name, value in fields.items():

@@ -15,7 +15,7 @@ import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from cli_anything.pocketbase.core.session import STATE_DIR_ENV
+from pocketbase_cli.core.session import STATE_DIR_ENV
 
 _AUTH_REQUIRED_MESSAGE = "The request requires valid record authorization."
 _SUPERUSER_REQUIRED_MESSAGE = "The request requires superuser authorization."
@@ -1154,17 +1154,17 @@ class _PocketBaseRemoteHandler(BaseHTTPRequestHandler):
 class FullE2ETests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.cli_bin = shutil.which("cli-anything-pocketbase")
+        cls.cli_bin = shutil.which("pocketbase-cli")
         if cls.cli_bin is None:
-            candidate = Path(sysconfig.get_path("scripts")) / "cli-anything-pocketbase"
+            candidate = Path(sysconfig.get_path("scripts")) / "pocketbase-cli"
             if candidate.exists():
                 cls.cli_bin = str(candidate)
         if cls.cli_bin is None:
-            candidate = Path(site.getuserbase()) / "bin" / "cli-anything-pocketbase"
+            candidate = Path(site.getuserbase()) / "bin" / "pocketbase-cli"
             if candidate.exists():
                 cls.cli_bin = str(candidate)
         if cls.cli_bin is None:
-            raise unittest.SkipTest("cli-anything-pocketbase is not installed")
+            raise unittest.SkipTest("pocketbase-cli is not installed")
 
         cls.remote_fixture = _RemoteFixture()
         cls.remote_server = ThreadingHTTPServer(("127.0.0.1", 0), _PocketBaseRemoteHandler)
@@ -1279,7 +1279,7 @@ class FullE2ETests(unittest.TestCase):
     def test_help(self) -> None:
         completed = self.run_cli("--help")
         self.assertEqual(completed.returncode, 0, msg=completed.stderr)
-        self.assertIn("Remote-only CLI-Anything harness for PocketBase", completed.stdout)
+        self.assertIn("Remote-only PocketBase CLI for deployed PocketBase instances", completed.stdout)
         self.assertIn("auth", completed.stdout)
         self.assertIn("settings", completed.stdout)
         self.assertIn("logs", completed.stdout)

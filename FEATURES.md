@@ -1,10 +1,10 @@
-# PocketBase CLI-Anything Harness
+# PocketBase CLI
 
 Target software: PocketBase
 Source path: `<repo-root>`
-Harness path: `<repo-root>/agent-harness`
+Project path: `<repo-root>`
 
-## What This Harness Provides
+## What This CLI Provides
 
 - Remote-only Click CLI for deployed PocketBase instances
 - Default interactive REPL when no subcommand is provided
@@ -26,18 +26,18 @@ Harness path: `<repo-root>/agent-harness`
 - explicit ensure conflict policies via `--if-exists` and `--if-missing`
 - compact ensure output via `--output summary|full`
 - Best-effort `/api/health` probe in `info`
-- Canonical command surface and examples live in `cli_anything/pocketbase/README.md`
+- Canonical command surface and examples live in `pocketbase_cli/README.md`
 
 ## Backend Strategy
 
-This harness no longer wraps the local PocketBase CLI.
+This CLI no longer wraps the local PocketBase CLI.
 
 All operational commands use PocketBase's HTTP API against a remote deployment. The intended primary auth flow is PocketBase `superuser` login against the `_superusers` collection.
 
 ## Notes
 
-- Session history, config, and auth state are stored in `~/.cache/cli-anything-pocketbase` by default.
-- The harness attempts to restrict the session file permissions to `0600`.
+- Session history, config, and auth state are stored in `~/.cache/pocketbase-cli` by default.
+- The CLI attempts to restrict the session file permissions to `0600`.
 - Supported persisted config keys are `base_url`, `auth_collection`, and `timeout`.
 - Hidden compatibility aliases under `remote ...` remain available, but the preferred command surface is the top-level groups.
 - JSON output now exposes a stable envelope with `meta`, `result`, structured `error`, `http`, and `pagination`.

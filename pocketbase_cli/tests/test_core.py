@@ -4,10 +4,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from cli_anything.pocketbase.pocketbase_cli import _parse_batch_payload
-from cli_anything.pocketbase.core.session import SessionStore, parse_config_value
-from cli_anything.pocketbase.core.repl import _sanitize_history_tokens
-from cli_anything.pocketbase.utils.pocketbase_remote import PocketBaseRemoteClient, PocketBaseRemoteError
+from pocketbase_cli.pocketbase_cli import _parse_batch_payload
+from pocketbase_cli.core.session import SessionStore, parse_config_value
+from pocketbase_cli.core.repl import _sanitize_history_tokens
+from pocketbase_cli.utils.pocketbase_remote import PocketBaseRemoteClient, PocketBaseRemoteError
 
 
 class SessionStateTests(unittest.TestCase):
@@ -102,7 +102,7 @@ class RemoteClientTests(unittest.TestCase):
 
     def test_remote_client_sets_non_python_default_user_agent(self) -> None:
         client = PocketBaseRemoteClient(base_url="https://pb.example.com")
-        self.assertEqual(client.user_agent, "cli-anything-pocketbase/0.1")
+        self.assertEqual(client.user_agent, "pocketbase-cli/0.1")
 
     def test_request_requires_token_when_requested(self) -> None:
         client = PocketBaseRemoteClient(base_url="https://pb.example.com")

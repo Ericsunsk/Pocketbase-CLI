@@ -6,8 +6,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-STATE_DIR_ENV = "CLI_ANYTHING_POCKETBASE_STATE_DIR"
-DEFAULT_STATE_DIR = Path("~/.cache/cli-anything-pocketbase").expanduser()
+STATE_DIR_ENV = "POCKETBASE_CLI_STATE_DIR"
+DEFAULT_STATE_DIR = Path("~/.cache/pocketbase-cli").expanduser()
 DEFAULT_SESSION_PATH = "session.json"
 
 INT_CONFIG_KEYS = {"timeout"}
@@ -153,7 +153,8 @@ class SessionState:
 
 class SessionStore:
     def __init__(self, path: Path | None = None) -> None:
-        base_dir = Path(os.environ.get(STATE_DIR_ENV, str(DEFAULT_STATE_DIR))).expanduser()
+        configured_dir = os.environ.get(STATE_DIR_ENV)
+        base_dir = Path(configured_dir).expanduser() if configured_dir else DEFAULT_STATE_DIR
         self.path = path or (base_dir / DEFAULT_SESSION_PATH)
 
     def load(self) -> SessionState:
