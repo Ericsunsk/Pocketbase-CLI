@@ -1,13 +1,15 @@
 # pocketbase-cli
 
-Remote-only standalone CLI for [PocketBase](https://github.com/pocketbase/pocketbase).
+Detailed command reference for the standalone remote CLI for [PocketBase](https://github.com/pocketbase/pocketbase).
+
+If you are looking for the project overview, install options, and repository layout, start with the repository root `README.md`.
 
 ## Install
 
 Use a virtual environment so editable installs do not depend on a system Python policy override.
 
 ```sh
-cd /Users/apple/pocketbase
+cd <repo-root>
 python3 -m venv .venv
 . .venv/bin/activate
 python -m pip install -e .
@@ -17,6 +19,7 @@ python -m pip install -e .
 
 ```sh
 pocketbase-cli config set base_url https://pb.example.com
+pocketbase-cli config set auth_collection _superusers
 printf 'Secret123\n' | pocketbase-cli auth login --password-stdin admin@example.com
 pocketbase-cli --json info
 pocketbase-cli schema --json
@@ -29,7 +32,14 @@ No subcommand starts REPL mode:
 pocketbase-cli
 ```
 
-## LLM-Oriented Features
+## Common Workflows
+
+- authenticate against a deployed PocketBase admin endpoint
+- inspect the full CLI contract with `schema --json`
+- run remote admin operations with stable JSON output
+- use REPL mode for iterative maintenance and troubleshooting
+
+## Automation and Agent Features
 
 - `schema --json` and `schema <command path> --json` expose a machine-readable command contract
 - Stable JSON envelope with `meta`, `result`, `error`, `http`, and `pagination`
@@ -45,7 +55,7 @@ pocketbase-cli
   - `records upsert`
   - `records delete-by-filter`
 
-## Commands
+## Command Groups
 
 - `info`: remote CLI details, defaults, auth state, and `/api/health` probe
 - `schema [<command path...>]`: machine-readable command contract for tools and LLMs
@@ -63,6 +73,23 @@ pocketbase-cli
 - `undo` / `redo`
 - `history`
 - `repl`
+
+## Remote Scope
+
+This CLI is pure remote mode. It does not wrap the local PocketBase binary anymore.
+
+Use it when you need:
+
+- operator access to a deployed PocketBase instance
+- scriptable admin workflows with structured output
+- agent-friendly command discovery and guardrails
+
+Not supported:
+
+- local `serve`
+- local `migrate`
+- local `update`
+- local `superuser` CLI wrappers
 
 ## Schema Contract
 
@@ -253,23 +280,6 @@ pocketbase-cli backups delete nightly.zip --yes
 pocketbase-cli backups restore nightly.zip --yes
 pocketbase-cli raw GET /api/health
 ```
-
-## Remote Model
-
-This CLI is pure remote mode. It does not wrap the local PocketBase binary anymore.
-
-Practical consequence:
-
-- use this CLI for deployed PocketBase instances reachable by URL
-- use `auth login` with PocketBase `superuser` credentials by default
-- the default auth collection is `_superusers`
-
-Not supported:
-
-- local `serve`
-- local `migrate`
-- local `update`
-- local `superuser` CLI wrappers
 
 ## Config and Session
 
