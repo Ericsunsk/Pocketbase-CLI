@@ -1,17 +1,6 @@
 # Testing
 
-## Unit Coverage (`test_core.py`)
-
-- Session state remote config set/unset persistence behavior
-- Undo/redo stack behavior for remote defaults
-- Remote config value parsing for `base_url`, `auth_collection`, and `timeout`
-- Remote auth state persistence and clearing
-- Remote client URL building
-- Remote client auth precondition checks
-- File URL generation with query parameters
-- REPL history redaction for positional secrets while preserving `--password-stdin` identities
-
-## End-to-End Coverage (`test_full_e2e.py`)
+## Coverage
 
 - Installed CLI command discoverability (`pocketbase-cli`)
 - `--help` reflects the remote-only command surface
@@ -43,16 +32,15 @@
 - Remote `files token|url`
 - Remote `backups list|create|upload|delete|download|restore`
 
-Remote API e2e uses a local in-process stub HTTP server so tests stay deterministic and do not require a real deployed PocketBase instance.
+The TypeScript suite uses Vitest plus local stubs/mocks so validation stays deterministic and does not require a real deployed PocketBase instance.
 
 ## Validation Commands
 
 ```sh
 cd <repo-root>
-python3 -m venv .venv
-. .venv/bin/activate
-python -m pip install -e .
-python -m unittest pocketbase_cli.tests.test_core
-python -m unittest pocketbase_cli.tests.test_full_e2e
-python -m unittest pocketbase_cli.tests.test_core pocketbase_cli.tests.test_full_e2e
+npm install
+npm run typecheck
+npm run lint
+npm run test
+npm run build
 ```

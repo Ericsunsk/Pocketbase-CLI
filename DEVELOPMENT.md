@@ -4,10 +4,12 @@ Remote-only standalone CLI for [PocketBase](https://github.com/pocketbase/pocket
 
 ## Layout
 
-- `setup.py`: installable package entry point
+- `package.json`: npm package metadata and CLI bin mapping
+- `src/`: TypeScript source code
+- `test/`: Vitest test suite
 - `FEATURES.md`: CLI scope and command surface
 - `TESTING.md`: validation notes
-- `pocketbase_cli/README.md`: end-user usage guide
+- `README.en.md` / `README.zh-CN.md`: end-user guides
 
 ## Install
 
@@ -17,31 +19,30 @@ Run from the repository root:
 cd <repo-root>
 ```
 
-Then install in a virtual environment:
+Then install dependencies and build:
 
 ```sh
-python3 -m venv .venv
-. .venv/bin/activate
-python -m pip install -e .
+npm install
+npm run build
 ```
 
 ## Global Install (For LLM / Tooling)
 
 ```sh
-python3 -m pip install --user --break-system-packages <repo-root>
+npm i -g pocketbase-cli
 ```
 
 ## Run
 
 ```sh
-pocketbase-cli --help
-pocketbase-cli auth login
-pocketbase-cli auth logout
-pocketbase-cli auth logout --yes
-pocketbase-cli config set base_url https://pb.example.com
-printf 'Secret123\n' | pocketbase-cli auth login --password-stdin admin@example.com
-pocketbase-cli schema --json
-pocketbase-cli collections ensure --file collection.json
-pocketbase-cli collections ensure --file collection.json --if-exists fail
-pocketbase-cli collections ensure --file collection.json --output summary
+node dist/bin.js --help
+node dist/bin.js auth login
+node dist/bin.js auth logout
+node dist/bin.js auth logout --yes
+node dist/bin.js config set base_url https://pb.example.com
+printf 'Secret123\n' | node dist/bin.js auth login --password-stdin admin@example.com
+node dist/bin.js schema --json
+node dist/bin.js collections ensure --file collection.json
+node dist/bin.js collections ensure --file collection.json --if-exists fail
+node dist/bin.js collections ensure --file collection.json --output summary
 ```

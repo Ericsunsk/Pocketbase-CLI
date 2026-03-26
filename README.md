@@ -1,8 +1,8 @@
 # PocketBase CLI
 
-[![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![Node.js 20+](https://img.shields.io/badge/node-20%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
 [![Remote Only](https://img.shields.io/badge/mode-remote--only-0A7EA4)](README.en.md)
-[![JSON + Schema](https://img.shields.io/badge/output-JSON%20%2B%20schema-1F6FEB)](pocketbase_cli/README.md)
+[![JSON + Schema](https://img.shields.io/badge/output-JSON%20%2B%20schema-1F6FEB)](README.en.md)
 [![Last Commit](https://img.shields.io/github/last-commit/Ericsunsk/Pocketbase-CLI)](https://github.com/Ericsunsk/Pocketbase-CLI/commits/main)
 [![GitHub Stars](https://img.shields.io/github/stars/Ericsunsk/Pocketbase-CLI?style=social)](https://github.com/Ericsunsk/Pocketbase-CLI/stargazers)
 
@@ -24,8 +24,6 @@ PocketBase CLI provides a consistent command surface for remote administration, 
 
 - [`README.en.md`](README.en.md): full English overview
 - [`README.zh-CN.md`](README.zh-CN.md): 完整中文说明
-- [`pocketbase_cli/README.md`](pocketbase_cli/README.md): detailed English command reference
-- [`pocketbase_cli/README.zh-CN.md`](pocketbase_cli/README.zh-CN.md): 中文详细命令手册
 - [`FEATURES.md`](FEATURES.md): feature scope and behavior notes
 - [`DEVELOPMENT.md`](DEVELOPMENT.md): development notes
 - [`TESTING.md`](TESTING.md): validation commands and test coverage
@@ -33,19 +31,16 @@ PocketBase CLI provides a consistent command surface for remote administration, 
 ## Quick Start
 
 ```sh
-python3 -m venv .venv
-. .venv/bin/activate
-python -m pip install -e .
+npm install
+npm run build
 
-pocketbase-cli config set base_url https://pb.example.com
-pocketbase-cli config set auth_collection _superusers
-printf 'Secret123\n' | pocketbase-cli auth login --password-stdin admin@example.com
-pocketbase-cli --json info
+node dist/bin.js config set base_url https://pb.example.com
+node dist/bin.js config set auth_collection _superusers
+printf 'Secret123\n' | node dist/bin.js auth login --password-stdin admin@example.com
+node dist/bin.js --json info
 ```
 
 ## Language Guides
 
 - [`English Guide`](README.en.md)
 - [`中文指南`](README.zh-CN.md)
-- [`English Command Reference`](pocketbase_cli/README.md)
-- [`中文命令手册`](pocketbase_cli/README.zh-CN.md)

@@ -6,7 +6,7 @@ Project path: `<repo-root>`
 
 ## What This CLI Provides
 
-- Remote-only Click CLI for deployed PocketBase instances
+- Remote-only TypeScript CLI for deployed PocketBase instances
 - Default interactive REPL when no subcommand is provided
 - Machine-readable `--json` output mode
 - Machine-readable `schema --json` command contract for tools and LLMs
@@ -26,7 +26,7 @@ Project path: `<repo-root>`
 - explicit ensure conflict policies via `--if-exists` and `--if-missing`
 - compact ensure output via `--output summary|full`
 - Best-effort `/api/health` probe in `info`
-- Canonical command surface and examples live in `pocketbase_cli/README.md`
+- Canonical command surface and examples live in `README.en.md` and `README.zh-CN.md`
 
 ## Backend Strategy
 
@@ -39,7 +39,6 @@ All operational commands use PocketBase's HTTP API against a remote deployment. 
 - Session history, config, and auth state are stored in `~/.cache/pocketbase-cli` by default.
 - The CLI attempts to restrict the session file permissions to `0600`.
 - Supported persisted config keys are `base_url`, `auth_collection`, and `timeout`.
-- Hidden compatibility aliases under `remote ...` remain available, but the preferred command surface is the top-level groups.
 - JSON output now exposes a stable envelope with `meta`, `result`, structured `error`, `http`, and `pagination`.
 - `files url` is a helper that builds PocketBase file URLs and can optionally fetch a temporary file token via `/api/files/token`.
 - `logs stats` wraps `/api/logs/stats` for quick operational summaries without falling back to `raw`.

@@ -1,8 +1,8 @@
 # PocketBase CLI
 
-[![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![Node.js 20+](https://img.shields.io/badge/node-20%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
 [![Remote Only](https://img.shields.io/badge/mode-remote--only-0A7EA4)](README.en.md)
-[![JSON + Schema](https://img.shields.io/badge/output-JSON%20%2B%20schema-1F6FEB)](pocketbase_cli/README.zh-CN.md)
+[![JSON + Schema](https://img.shields.io/badge/output-JSON%20%2B%20schema-1F6FEB)](README.zh-CN.md)
 [![Last Commit](https://img.shields.io/github/last-commit/Ericsunsk/Pocketbase-CLI)](https://github.com/Ericsunsk/Pocketbase-CLI/commits/main)
 [![GitHub Stars](https://img.shields.io/github/stars/Ericsunsk/Pocketbase-CLI?style=social)](https://github.com/Ericsunsk/Pocketbase-CLI/stargazers)
 
@@ -15,7 +15,7 @@
 | 项目 | 说明 |
 | --- | --- |
 | 运行模式 | Remote-only |
-| Runtime | Python 3.9+ |
+| Runtime | Node.js 20+ |
 | 交互方式 | CLI、REPL、`--json`、`schema --json` |
 | 目标对象 | 已部署的 PocketBase 实例 |
 | 典型场景 | 运维、自动化脚本、Agent Tooling |
@@ -43,42 +43,42 @@
 
 ## 安装方式
 
-### 本地 Editable Install
+### 本地开发
 
 ```sh
-python3 -m venv .venv
-. .venv/bin/activate
-python -m pip install -e .
+npm install
+npm run build
 ```
 
-### User-Level Install
-
-如果你希望在当前仓库之外也能直接使用命令，可以这样安装：
+在仓库内直接运行构建后的 CLI：
 
 ```sh
-python3 -m pip install --user --break-system-packages .
+node dist/bin.js --help
 ```
 
-如果 Shell 找不到命令，请把以下目录加入 `PATH`：
+### 全局安装
 
-- `$HOME/.local/bin`
-- `$HOME/Library/Python/<python-version>/bin`
+如果后续发布到 npm，并且你希望在仓库之外也能直接使用命令，可以这样安装：
+
+```sh
+npm i -g pocketbase-cli
+```
 
 ## 快速开始
 
 ```sh
-pocketbase-cli config set base_url https://pb.example.com
-pocketbase-cli config set auth_collection _superusers
-printf 'Secret123\n' | pocketbase-cli auth login --password-stdin admin@example.com
-pocketbase-cli --json info
-pocketbase-cli schema --json
-pocketbase-cli records list users --all
+node dist/bin.js config set base_url https://pb.example.com
+node dist/bin.js config set auth_collection _superusers
+printf 'Secret123\n' | node dist/bin.js auth login --password-stdin admin@example.com
+node dist/bin.js --json info
+node dist/bin.js schema --json
+node dist/bin.js records list users --all
 ```
 
 不带子命令直接运行会进入 REPL：
 
 ```sh
-pocketbase-cli
+node dist/bin.js
 ```
 
 ## 命令分组
@@ -129,23 +129,18 @@ pocketbase/
 ├── DEVELOPMENT.md
 ├── FEATURES.md
 ├── TESTING.md
-├── setup.py
-└── pocketbase_cli/
-    ├── README.md
-    ├── __init__.py
-    ├── __main__.py
-    ├── pocketbase_cli.py
-    ├── core/
-    ├── utils/
-    └── tests/
+├── package.json
+├── tsconfig.json
+├── tsup.config.ts
+├── src/
+├── test/
+└── dist/
 ```
 
 ## 文档导航
 
 - [`README.md`](README.md)：双语入口页
 - [`README.en.md`](README.en.md)：英文说明
-- [`pocketbase_cli/README.md`](pocketbase_cli/README.md)：英文详细命令参考
-- [`pocketbase_cli/README.zh-CN.md`](pocketbase_cli/README.zh-CN.md)：中文详细命令手册
 - [`FEATURES.md`](FEATURES.md)：功能范围与行为说明
 - [`DEVELOPMENT.md`](DEVELOPMENT.md)：开发说明
 - [`TESTING.md`](TESTING.md)：测试范围与验证命令

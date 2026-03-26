@@ -1,8 +1,8 @@
 # PocketBase CLI
 
-[![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![Node.js 20+](https://img.shields.io/badge/node-20%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
 [![Remote Only](https://img.shields.io/badge/mode-remote--only-0A7EA4)](README.en.md)
-[![JSON + Schema](https://img.shields.io/badge/output-JSON%20%2B%20schema-1F6FEB)](pocketbase_cli/README.md)
+[![JSON + Schema](https://img.shields.io/badge/output-JSON%20%2B%20schema-1F6FEB)](README.en.md)
 [![Last Commit](https://img.shields.io/github/last-commit/Ericsunsk/Pocketbase-CLI)](https://github.com/Ericsunsk/Pocketbase-CLI/commits/main)
 [![GitHub Stars](https://img.shields.io/github/stars/Ericsunsk/Pocketbase-CLI?style=social)](https://github.com/Ericsunsk/Pocketbase-CLI/stargazers)
 
@@ -15,7 +15,7 @@ Standalone remote CLI for deployed [PocketBase](https://github.com/pocketbase/po
 | Item | Value |
 | --- | --- |
 | Mode | Remote-only |
-| Runtime | Python 3.9+ |
+| Runtime | Node.js 20+ |
 | Interface | CLI, REPL, `--json`, `schema --json` |
 | Target | Deployed PocketBase instances |
 | Best for | operators, automation, agent tooling |
@@ -43,42 +43,42 @@ Compared with calling the HTTP API directly, it adds:
 
 ## Installation
 
-### Editable Local Install
+### Local Development
 
 ```sh
-python3 -m venv .venv
-. .venv/bin/activate
-python -m pip install -e .
+npm install
+npm run build
 ```
 
-### User-Level Install
-
-Use this when you want the command available outside the current repository:
+Run the built CLI directly from the repository:
 
 ```sh
-python3 -m pip install --user --break-system-packages .
+node dist/bin.js --help
 ```
 
-If your shell cannot find the command, add one of these directories to `PATH`:
+### Global Install
 
-- `$HOME/.local/bin`
-- `$HOME/Library/Python/<python-version>/bin`
+Use this after publishing to npm if you want the command available outside the current repository:
+
+```sh
+npm i -g pocketbase-cli
+```
 
 ## Quick Start
 
 ```sh
-pocketbase-cli config set base_url https://pb.example.com
-pocketbase-cli config set auth_collection _superusers
-printf 'Secret123\n' | pocketbase-cli auth login --password-stdin admin@example.com
-pocketbase-cli --json info
-pocketbase-cli schema --json
-pocketbase-cli records list users --all
+node dist/bin.js config set base_url https://pb.example.com
+node dist/bin.js config set auth_collection _superusers
+printf 'Secret123\n' | node dist/bin.js auth login --password-stdin admin@example.com
+node dist/bin.js --json info
+node dist/bin.js schema --json
+node dist/bin.js records list users --all
 ```
 
 Run without a subcommand to enter REPL mode:
 
 ```sh
-pocketbase-cli
+node dist/bin.js
 ```
 
 ## Command Groups
@@ -129,23 +129,18 @@ pocketbase/
 ├── DEVELOPMENT.md
 ├── FEATURES.md
 ├── TESTING.md
-├── setup.py
-└── pocketbase_cli/
-    ├── README.md
-    ├── __init__.py
-    ├── __main__.py
-    ├── pocketbase_cli.py
-    ├── core/
-    ├── utils/
-    └── tests/
+├── package.json
+├── tsconfig.json
+├── tsup.config.ts
+├── src/
+├── test/
+└── dist/
 ```
 
 ## Documentation
 
 - [`README.md`](README.md): bilingual landing page
 - [`README.zh-CN.md`](README.zh-CN.md): Chinese overview
-- [`pocketbase_cli/README.md`](pocketbase_cli/README.md): detailed English command reference
-- [`pocketbase_cli/README.zh-CN.md`](pocketbase_cli/README.zh-CN.md): Chinese command reference
 - [`FEATURES.md`](FEATURES.md): feature scope and behavior notes
 - [`DEVELOPMENT.md`](DEVELOPMENT.md): development notes
 - [`TESTING.md`](TESTING.md): validation commands and test coverage

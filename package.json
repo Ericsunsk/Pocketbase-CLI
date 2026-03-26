@@ -1,0 +1,39 @@
+{
+  "name": "pocketbase-cli",
+  "version": "0.1.0",
+  "description": "Remote-only PocketBase CLI (TypeScript)",
+  "license": "MIT",
+  "type": "commonjs",
+  "files": [
+    "dist",
+    "README.md",
+    "README.en.md",
+    "README.zh-CN.md"
+  ],
+  "bin": {
+    "pocketbase-cli": "./dist/bin.js"
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --ext .ts",
+    "test": "vitest run",
+    "clean": "rm -rf dist",
+    "dev": "tsup --watch"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "commander": "^11.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "eslint": "^8.57.0",
+    "tsup": "^7.0.0",
+    "typescript": "^5.5.0",
+    "vitest": "^0.34.0"
+  }
+}
