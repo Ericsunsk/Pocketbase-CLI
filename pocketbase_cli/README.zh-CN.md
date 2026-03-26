@@ -1,14 +1,14 @@
 # pocketbase-cli
 
-Detailed command reference for the standalone remote CLI for [PocketBase](https://github.com/pocketbase/pocketbase).
+独立远程 PocketBase CLI 的中文详细命令手册。
 
-[`English`](README.md) | [`简体中文`](README.zh-CN.md) | [`Project Home`](../README.md)
+[`English`](README.md) | [`简体中文`](README.zh-CN.md) | [`项目首页`](../README.md)
 
-If you are looking for the project overview, install options, and repository layout, start with the repository root `README.md`.
+如果你想先了解项目定位、安装方式和仓库结构，建议先阅读仓库根目录下的 `README.md`。
 
-## Install
+## 安装
 
-Use a virtual environment so editable installs do not depend on a system Python policy override.
+建议使用 virtual environment，避免 editable install 受系统 Python 策略影响。
 
 ```sh
 cd <repo-root>
@@ -17,7 +17,7 @@ python3 -m venv .venv
 python -m pip install -e .
 ```
 
-## Quick Start
+## 快速开始
 
 ```sh
 pocketbase-cli config set base_url https://pb.example.com
@@ -28,39 +28,35 @@ pocketbase-cli schema --json
 pocketbase-cli records list users --all
 ```
 
-No subcommand starts REPL mode:
+不带子命令直接运行会进入 REPL：
 
 ```sh
 pocketbase-cli
 ```
 
-## Common Workflows
+## 常见工作流
 
-- authenticate against a deployed PocketBase admin endpoint
-- inspect the full CLI contract with `schema --json`
-- run remote admin operations with stable JSON output
-- use REPL mode for iterative maintenance and troubleshooting
+- 对已部署的 PocketBase Admin Endpoint 做认证
+- 通过 `schema --json` 检查完整命令契约
+- 用稳定的 JSON 输出执行远程管理操作
+- 在 REPL 中做迭代式维护、巡检与排障
 
-## Automation and Agent Features
+## 自动化与 Agent 特性
 
-- `schema --json` and `schema <command path> --json` expose a machine-readable command contract
-- Stable JSON envelope with `meta`, `result`, `error`, `http`, and `pagination`
-- stdin-first JSON inputs with `--file`, `--file -`, and `--stdin-json`
-- direct record file uploads with repeatable `--binary-file field=path`
-- secret-safe auth input with `auth login --password-stdin`
-- explicit destructive-operation guardrails via `--yes`
-- pagination helpers via `--all`
-- explicit ensure policies via `--if-exists` and `--if-missing`
-- compact ensure responses via `--output summary|full`
-- filter helpers for record lookup and mutation:
-  - `records find`
-  - `records upsert`
-  - `records delete-by-filter`
+- `schema --json` 和 `schema <command path> --json` 可暴露机读命令契约
+- 稳定 JSON Envelope，包含 `meta`、`result`、`error`、`http`、`pagination`
+- stdin-first JSON 输入模式，支持 `--file`、`--file -`、`--stdin-json`
+- 通过可重复的 `--binary-file field=path` 直接上传 Record 文件
+- `auth login --password-stdin` 支持更安全的 Secret 输入方式
+- 破坏性操作需要显式 `--yes`
+- `--all` 可自动拉取分页数据
+- `collections ensure` 支持 `--if-exists`、`--if-missing`、`--output`
+- 提供 `records find`、`records upsert`、`records delete-by-filter` 这类更适合自动化的辅助命令
 
-## Command Groups
+## 命令分组
 
-- `info`: remote CLI details, defaults, auth state, and `/api/health` probe
-- `schema [<command path...>]`: machine-readable command contract for tools and LLMs
+- `info`：查看远程 CLI 信息、默认配置、认证状态与 `/api/health`
+- `schema [<command path...>]`：输出给工具和 LLM 使用的命令契约
 - `auth login|logout|status|whoami|refresh`
 - `settings get|patch|test-s3|test-email|apple-client-secret`
 - `logs list|get|stats`
@@ -76,26 +72,26 @@ pocketbase-cli
 - `history`
 - `repl`
 
-## Remote Scope
+## 远程能力边界
 
-This CLI is pure remote mode. It does not wrap the local PocketBase binary anymore.
+这个 CLI 是纯远程模式，不封装本地 PocketBase Binary。
 
-Use it when you need:
+适合的场景：
 
-- operator access to a deployed PocketBase instance
-- scriptable admin workflows with structured output
-- agent-friendly command discovery and guardrails
+- 面向已部署 PocketBase 实例的运维管理
+- 需要结构化输出的脚本和自动化任务
+- 需要命令发现和安全护栏的 Agent Tooling
 
-Not supported:
+不支持：
 
-- local `serve`
-- local `migrate`
-- local `update`
-- local `superuser` CLI wrappers
+- 本地 `serve`
+- 本地 `migrate`
+- 本地 `update`
+- 本地 `superuser` CLI wrapper
 
 ## Schema Contract
 
-Discover the full command surface without scraping help text:
+无需解析 help 文本，也能发现完整命令面：
 
 ```sh
 pocketbase-cli schema --json
@@ -103,26 +99,26 @@ pocketbase-cli schema records list --json
 pocketbase-cli schema backups restore --json
 ```
 
-The schema contract includes:
+Schema Contract 包含：
 
-- `commands`: list of command and group entries
-- `path`: dot-notated command path such as `records.list`
-- `arguments`: positional arguments with type and requiredness
-- `options`: flags and options with defaults and help text
+- `commands`：命令和分组条目列表
+- `path`：如 `records.list` 这样的 dot notation 命令路径
+- `arguments`：位置参数及其类型、必填信息
+- `options`：flags 和 options，以及默认值和 help 信息
 - `auth_required`
 - `dangerous`
-- `confirmation_required` and `confirmation_flag`
+- `confirmation_required` 与 `confirmation_flag`
 - `examples`
 
-Hidden compatibility aliases can be included with:
+如果需要包含隐藏兼容别名，可以这样调用：
 
 ```sh
 pocketbase-cli schema --json --include-hidden
 ```
 
-## JSON Output Contract
+## JSON 输出契约
 
-Use `--json` for stable machine output:
+对自动化调用建议始终启用 `--json`：
 
 ```sh
 pocketbase-cli --json info
@@ -130,7 +126,7 @@ pocketbase-cli --json settings get
 pocketbase-cli --json records list users --all
 ```
 
-Success payload shape:
+成功返回示例：
 
 ```json
 {
@@ -162,7 +158,7 @@ Success payload shape:
 }
 ```
 
-Error payloads keep the same top-level envelope and add structured error metadata:
+错误返回会保持相同的顶层结构，并附带结构化错误字段：
 
 - `error.type`
 - `error.message`
@@ -171,16 +167,16 @@ Error payloads keep the same top-level envelope and add structured error metadat
 - `error.missing_prerequisite`
 - `error.http_status`
 
-## Input Patterns
+## 输入模式
 
-For JSON body commands, prefer these patterns in order:
+对于需要 JSON Body 的命令，推荐按以下优先级使用：
 
 1. `--file payload.json`
 2. `--file -`
 3. `--stdin-json`
 4. `--data '{...}'`
 
-Examples:
+示例：
 
 ```sh
 pocketbase-cli settings patch --file settings.json
@@ -188,24 +184,24 @@ printf '{"meta":{"appName":"Patched via stdin"}}\n' | pocketbase-cli settings pa
 printf '{"requests":[{"method":"POST","url":"/api/collections/users/records","body":{"email":"stdin@example.com"}}]}\n' | pocketbase-cli batch run --stdin-json
 ```
 
-`auth login` supports secret-safe stdin input:
+`auth login` 支持更安全的 stdin Secret 输入：
 
 ```sh
 printf 'Secret123\n' | pocketbase-cli auth login --password-stdin admin@example.com
 ```
 
-Record create/update/upsert can upload binary files directly:
+`records create`、`records update`、`records upsert` 可直接上传 Binary File：
 
 ```sh
 pocketbase-cli records update users RECORD_ID --data '{"name":"With avatar"}' --binary-file avatar=./avatar.png
 pocketbase-cli records upsert users --filter 'email="a@example.com"' --binary-file avatar=./avatar.png
 ```
 
-`--binary-file` is repeatable and accepts raw PocketBase file field keys, including modifiers like `field+` for append.
+`--binary-file` 支持重复传入，也支持像 `field+` 这样的 PocketBase File Field Modifier。
 
-## Safety Rails
+## 安全护栏
 
-The following commands require explicit confirmation with `--yes`:
+以下命令必须显式传入 `--yes`：
 
 - `records delete`
 - `records delete-by-filter`
@@ -215,21 +211,21 @@ The following commands require explicit confirmation with `--yes`:
 - `backups delete`
 - `backups restore`
 
-This is intentional so an agent must acknowledge destructive or side-effectful work.
+这个设计是有意为之，目的是让脚本或 Agent 明确确认破坏性或有副作用的操作。
 
-`collections ensure` keys off the submitted payload `name` and then creates or updates that collection. It is intentionally not a rename helper; use `collections update` when you need to rename an existing collection explicitly.
+`collections ensure` 通过提交 payload 中的 `name` 来判断目标集合，然后执行 create 或 update。它不是 rename helper；如果你要重命名已有集合，请使用 `collections update`。
 
-For stricter agent workflows, `collections ensure` also supports:
+更严格的 Agent Workflow 可以搭配：
 
 - `--if-exists update|fail`
 - `--if-missing create|fail`
 - `--output summary|full`
 
-Defaults are `update`, `create`, and `full`.
+默认值分别是 `update`、`create` 和 `full`。
 
-Use `--output summary` when the caller only needs the high-level result instead of the full remote response body.
+如果调用方只需要高层结果，不需要完整远程响应，可以使用 `--output summary`。
 
-## Examples
+## 示例
 
 ```sh
 pocketbase-cli config set base_url https://pb.example.com
@@ -283,23 +279,23 @@ pocketbase-cli backups restore nightly.zip --yes
 pocketbase-cli raw GET /api/health
 ```
 
-## Config and Session
+## 配置与 Session
 
-Session state is stored under `~/.cache/pocketbase-cli/session.json` by default.
+Session State 默认保存在 `~/.cache/pocketbase-cli/session.json`。
 
-Stored state includes:
+其中包括：
 
-- saved remote defaults from `config`
-- command history
-- undo/redo stacks for config changes
-- remote auth base URL, token, and current record
+- 通过 `config` 保存的远程默认配置
+- 命令历史
+- 配置变更的 undo/redo 栈
+- 远程认证的 base URL、token 和当前 record 信息
 
-The CLI attempts to restrict the session file permissions to `0600`.
+CLI 会尽量把 Session File 权限收紧到 `0600`。
 
-## Coverage Notes
+## 覆盖范围说明
 
-This CLI covers the documented remote admin APIs plus the major record auth flows for deployed PocketBase instances.
+这个 CLI 覆盖了已部署 PocketBase 实例常见的远程 Admin API，以及 Auth Collection 相关的主要认证流程。
 
-The main deliberate gap is:
+当前刻意保留的主要空缺是：
 
 - `realtime`

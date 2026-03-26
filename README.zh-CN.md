@@ -1,5 +1,11 @@
 # PocketBase CLI
 
+[![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![Remote Only](https://img.shields.io/badge/mode-remote--only-0A7EA4)](README.en.md)
+[![JSON + Schema](https://img.shields.io/badge/output-JSON%20%2B%20schema-1F6FEB)](pocketbase_cli/README.zh-CN.md)
+[![Last Commit](https://img.shields.io/github/last-commit/Ericsunsk/Pocketbase-CLI)](https://github.com/Ericsunsk/Pocketbase-CLI/commits/main)
+[![GitHub Stars](https://img.shields.io/github/stars/Ericsunsk/Pocketbase-CLI?style=social)](https://github.com/Ericsunsk/Pocketbase-CLI/stargazers)
+
 面向已部署 [PocketBase](https://github.com/pocketbase/pocketbase) 实例的独立远程 CLI。
 
 [`English`](README.en.md) | [`简体中文`](README.zh-CN.md)
@@ -138,7 +144,8 @@ pocketbase/
 
 - [`README.md`](README.md)：双语入口页
 - [`README.en.md`](README.en.md)：英文说明
-- [`pocketbase_cli/README.md`](pocketbase_cli/README.md)：详细命令参考与示例
+- [`pocketbase_cli/README.md`](pocketbase_cli/README.md)：英文详细命令参考
+- [`pocketbase_cli/README.zh-CN.md`](pocketbase_cli/README.zh-CN.md)：中文详细命令手册
 - [`FEATURES.md`](FEATURES.md)：功能范围与行为说明
 - [`DEVELOPMENT.md`](DEVELOPMENT.md)：开发说明
 - [`TESTING.md`](TESTING.md)：测试范围与验证命令
