@@ -12,6 +12,7 @@ import { emitError, emitSuccess } from "../core/output";
 import type { RemoteResult } from "../http/remote-client";
 import { loadOptionalJsonObjectInput } from "../input/json-input";
 import { loadRecordMutationInput as loadSharedRecordMutationInput } from "../input/record-input";
+import { parseIntegerOptionValue } from "../input/validators";
 import { saveRemoteAuthResult } from "./auth-support";
 import {
   buildRemoteClient,
@@ -22,13 +23,26 @@ import {
   runRemoteAction
 } from "./support";
 
-function parseNumber(value: string | undefined): number | undefined {
+function parseNumber(
+  context: AppContext,
+  action: string,
+  optionName: string,
+  value: string | undefined
+): number | undefined {
   if (value === undefined) {
     return undefined;
   }
 
-  const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) ? parsed : undefined;
+  try {
+    return parseIntegerOptionValue(optionName, value);
+  } catch (error) {
+    emitError({
+      jsonOutput: context.jsonMode,
+      action,
+      message: error instanceof Error ? error.message : String(error),
+      errorType: "invalid_input"
+    });
+  }
 }
 
 const ARGUMENT_METADATA: Record<string, { help: string; sensitive?: boolean }> = {
@@ -378,8 +392,8 @@ function createRecordsListDefinition(context: AppContext): CommandDefinition {
           ) => {
             await recordCommand(context, `records list ${collection}`);
 
-            const page = parseNumber(options.page);
-            const perPage = parseNumber(options.perPage);
+            const page = parseNumber(context, "records.list", "--page", options.page);
+            const perPage = parseNumber(context, "records.list", "--per-page", options.perPage);
 
             await runRemoteAction(context, {
               action: "records.list",
@@ -527,7 +541,7 @@ function createRecordsFindDefinition(context: AppContext): CommandDefinition {
                   })
                 : await fetchAllPages({
                     action: "records.find",
-                    perPage: parseNumber(options.perPage),
+                    perPage: parseNumber(context, "records.find", "--per-page", options.perPage),
                     fetchPage: (currentPage, currentPerPage) =>
                       runFindListPage(context, {
                         collection,
@@ -1015,7 +1029,12 @@ function createRecordsDeleteByFilterDefinition(context: AppContext): CommandDefi
             }
             await recordCommand(context, historyParts.join(" "));
 
-            const expectCount = parseNumber(options.expectCount);
+            const expectCount = parseNumber(
+              context,
+              "records.delete-by-filter",
+              "--expect-count",
+              options.expectCount
+            );
             const client = buildRemoteClient(context, {
               action: "records.delete-by-filter",
               requireAuth: true
@@ -1971,7 +1990,12 @@ function createRecordsImpersonateDefinition(context: AppContext): CommandDefinit
               const result = await client.recordImpersonate({
                 collection,
                 recordId,
-                duration: parseNumber(options.duration),
+                duration: parseNumber(
+                  context,
+                  "records.impersonate",
+                  "--duration",
+                  options.duration
+                ),
                 fields: options.fields,
                 expand: options.expand
               });

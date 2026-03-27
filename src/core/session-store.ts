@@ -229,7 +229,9 @@ export class SessionStore {
         return new SessionState();
       }
       if (error instanceof SyntaxError) {
-        return new SessionState();
+        throw new Error(
+          `Failed to parse session state at ${this.path}. Fix or remove the corrupted file and try again.`
+        );
       }
       throw error;
     }
@@ -239,13 +241,10 @@ export class SessionStore {
     await mkdir(dirname(this.path), { recursive: true });
 
     const tempPath = `${this.path}.tmp-${process.pid}-${Date.now()}`;
-    await writeFile(tempPath, JSON.stringify(state.toJSON(), null, 2), "utf8");
-
-    try {
-      await chmod(tempPath, 0o600);
-    } catch {
-      // Keep best-effort parity with Python implementation without failing the write.
-    }
+    await writeFile(tempPath, JSON.stringify(state.toJSON(), null, 2), {
+      encoding: "utf8",
+      mode: 0o600
+    });
 
     await rename(tempPath, this.path);
 

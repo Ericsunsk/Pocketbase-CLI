@@ -56,11 +56,60 @@ const REMOTE_HELP_EXAMPLES = [
 
 const REPL_TOKEN_PATTERN =
   /"([^"\\]*(?:\\.[^"\\]*)*)"|'([^'\\]*(?:\\.[^'\\]*)*)'|(\S+)/gu;
+const AUTH_LOGIN_OPTIONS_WITH_VALUES = new Set(["--base-url", "--collection"]);
 
 function buildHelpText(): string {
   return [...BUILTIN_HELP_LINES, "", "PocketBase remote mode examples:", ...REMOTE_HELP_EXAMPLES].join(
     "\n"
   );
+}
+
+function sanitizeAuthLoginTokens(tokens: string[]): string {
+  const rendered = [...tokens];
+  let positionalCount = 0;
+
+  for (let index = 2; index < rendered.length; index += 1) {
+    const token = rendered[index];
+    if (AUTH_LOGIN_OPTIONS_WITH_VALUES.has(token)) {
+      index += 1;
+      continue;
+    }
+    if (token.startsWith("--")) {
+      continue;
+    }
+
+    positionalCount += 1;
+    if (positionalCount === 2) {
+      rendered[index] = "********";
+    }
+  }
+
+  return rendered.join(" ");
+}
+
+function hasUnterminatedQuote(line: string): boolean {
+  let quote: '"' | "'" | null = null;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const character = line[index];
+    if (character === "\\") {
+      index += 1;
+      continue;
+    }
+
+    if (quote) {
+      if (character === quote) {
+        quote = null;
+      }
+      continue;
+    }
+
+    if (character === '"' || character === "'") {
+      quote = character;
+    }
+  }
+
+  return quote !== null;
 }
 
 function stringifyData(data: unknown): string {
@@ -91,12 +140,7 @@ export function sanitizeHistoryTokens(tokens: string[]): string {
   }
 
   if (tokens[0] === "auth" && tokens[1] === "login") {
-    if (!tokens.includes("--password-stdin")) {
-      const rendered = [...tokens];
-      rendered[rendered.length - 1] = "********";
-      return rendered.join(" ");
-    }
-    return tokens.join(" ");
+    return sanitizeAuthLoginTokens(tokens);
   }
 
   if (tokens[0] !== "records") {
@@ -359,6 +403,16 @@ export class PocketBaseRepl {
   }
 
   private parseLine(line: string): string[] | null {
+    if (hasUnterminatedQuote(line)) {
+      this.emit({
+        ok: false,
+        action: "repl.parse",
+        message: "Unterminated quoted string in REPL input.",
+        errorType: "invalid_input"
+      });
+      return null;
+    }
+
     const tokens: string[] = [];
     REPL_TOKEN_PATTERN.lastIndex = 0;
     let match: RegExpExecArray | null;

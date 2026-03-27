@@ -2,15 +2,30 @@ import { Command } from "commander";
 
 import { AppContext, recordCommand } from "../app/context";
 import type { CommandDefinition, CommandParameter } from "../contract/command-registry";
+import { emitError } from "../core/output";
+import { parseIntegerOptionValue } from "../input/validators";
 import { fetchAllPages, runRemoteAction } from "./support";
 
-function parseNumber(value: string | undefined): number | undefined {
+function parseNumber(
+  context: AppContext,
+  action: string,
+  optionName: string,
+  value: string | undefined
+): number | undefined {
   if (value === undefined) {
     return undefined;
   }
 
-  const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) ? parsed : undefined;
+  try {
+    return parseIntegerOptionValue(optionName, value);
+  } catch (error) {
+    emitError({
+      jsonOutput: context.jsonMode,
+      action,
+      message: error instanceof Error ? error.message : String(error),
+      errorType: "invalid_input"
+    });
+  }
 }
 
 function listParameters(): CommandParameter[] {
@@ -103,8 +118,8 @@ export function createLogsDefinition(context: AppContext): CommandDefinition {
               all?: boolean;
             }) => {
               await recordCommand(context, "logs list");
-              const page = parseNumber(options.page);
-              const perPage = parseNumber(options.perPage);
+              const page = parseNumber(context, "logs.list", "--page", options.page);
+              const perPage = parseNumber(context, "logs.list", "--per-page", options.perPage);
 
               await runRemoteAction(context, {
                 action: "logs.list",

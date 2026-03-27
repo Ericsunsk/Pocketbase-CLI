@@ -32,6 +32,15 @@ describe("sanitizeHistoryTokens", () => {
     );
     expect(
       sanitizeHistoryTokens([
+        "auth",
+        "login",
+        "admin@example.com",
+        "Secret123",
+        "--password-stdin"
+      ])
+    ).toBe("auth login admin@example.com ******** --password-stdin");
+    expect(
+      sanitizeHistoryTokens([
         "records",
         "confirm-password-reset",
         "users",
@@ -266,5 +275,41 @@ describe("PocketBaseRepl", () => {
 
     expect(payloads.some((payload) => payload.action === "repl.dispatch")).toBe(false);
     expect(stderr).toEqual([]);
+  });
+
+  it("rejects unterminated quoted input instead of dispatching it", async () => {
+    const context = createContext();
+    const stdout: string[] = [];
+    const stderr: string[] = [];
+    const dispatch = vi.fn(async () => undefined);
+    const lines = ["config set base_url 'https://pb.example.com", "quit"];
+
+    const repl = new PocketBaseRepl({
+      context,
+      dispatch,
+      jsonOutput: true,
+      stdout: createWriter(stdout),
+      stderr: createWriter(stderr),
+      saveState: async () => undefined,
+      readLine: async () => {
+        const line = lines.shift();
+        if (line === undefined) {
+          throw new ReplEofError();
+        }
+        return line;
+      }
+    });
+
+    await repl.run();
+
+    const payloads = stderr
+      .join("")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+
+    expect(payloads.some((payload) => payload.action === "repl.parse")).toBe(true);
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(context.state.commandHistory).toEqual(["quit"]);
   });
 });

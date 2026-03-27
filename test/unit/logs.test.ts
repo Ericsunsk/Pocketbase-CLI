@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createLogsDefinition } from "../../src/commands/logs";
+import { CliExitError } from "../../src/core/output";
 import { PocketBaseRemoteClient } from "../../src/http/remote-client";
 import { SessionState, SessionStore } from "../../src/core/session-store";
 
@@ -69,5 +70,20 @@ describe("logs commands", () => {
 
     await command?.parseAsync(["node", "get", "log123"]);
     expect(spy).toHaveBeenCalledWith("log123");
+  });
+
+  it("rejects non-integer pagination values", async () => {
+    const context = buildContext();
+    const spy = vi.spyOn(PocketBaseRemoteClient.prototype, "logsList");
+
+    const definition = createLogsDefinition(context);
+    const listDefinition = definition.children?.find((child) => child.name === "list");
+    const command = listDefinition?.build?.();
+
+    await expect(
+      command?.parseAsync(["node", "list", "--per-page", "1.5"])
+    ).rejects.toBeInstanceOf(CliExitError);
+
+    expect(spy).not.toHaveBeenCalled();
   });
 });

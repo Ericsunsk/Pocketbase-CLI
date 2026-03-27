@@ -1,4 +1,4 @@
-import { access, mkdir, stat, writeFile } from "node:fs/promises";
+import { access, chmod, mkdir, rename, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 
 import { Command } from "commander";
@@ -38,6 +38,13 @@ async function ensureUploadSource(filePath: string): Promise<{ size: number }> {
   return {
     size: fileStats.size
   };
+}
+
+async function writePrivateFileAtomic(path: string, data: Uint8Array): Promise<void> {
+  const tempPath = `${path}.tmp-${process.pid}-${Date.now()}`;
+  await writeFile(tempPath, data, { mode: 0o600 });
+  await rename(tempPath, path);
+  await chmod(path, 0o600);
 }
 
 export function createBackupsDefinition(context: AppContext): CommandDefinition {
@@ -347,14 +354,13 @@ export function createBackupsDefinition(context: AppContext): CommandDefinition 
                   await mkdir(dirname(targetPath), {
                     recursive: true
                   });
-                  await writeFile(targetPath, result.data);
+                  await writePrivateFileAtomic(targetPath, result.data);
 
                   emitSuccess({
                     jsonOutput: context.jsonMode,
                     action: "backups.download",
                     message: "Backup download completed",
                     data: {
-                      url: result.url,
                       status: result.status,
                       path: targetPath,
                       size: result.data.byteLength,

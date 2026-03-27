@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -34,14 +34,14 @@ describe("SessionStore", () => {
     expect(loaded.remoteAuth.record).toEqual({ id: "superuser_1" });
   });
 
-  it("falls back safely on corrupt json", async () => {
+  it("fails fast on corrupt json", async () => {
     const root = await mkdtemp(join(tmpdir(), "pb-cli-session-"));
     const path = join(root, "session.json");
     await writeFile(path, "{not-json", "utf8");
 
-    const loaded = await new SessionStore(path).load();
-    expect(loaded.commandHistory).toEqual([]);
-    expect(loaded.hasRemoteAuth()).toBe(false);
+    await expect(new SessionStore(path).load()).rejects.toThrow(
+      `Failed to parse session state at ${path}.`
+    );
   });
 
   it("parses config values with python-compatible semantics", () => {
@@ -69,5 +69,16 @@ describe("SessionStore", () => {
       "undo_stack",
       "redo_stack"
     ]);
+  });
+
+  it("writes session state with private file permissions", async () => {
+    const root = await mkdtemp(join(tmpdir(), "pb-cli-session-"));
+    const path = join(root, "session.json");
+    const store = new SessionStore(path);
+
+    await store.save(new SessionState());
+
+    const fileStats = await stat(path);
+    expect(fileStats.mode & 0o777).toBe(0o600);
   });
 });

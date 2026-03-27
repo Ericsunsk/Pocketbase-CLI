@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { createCli } from "../../src/cli";
+import { CliExitError } from "../../src/core/output";
 import { SessionState, SessionStore } from "../../src/core/session-store";
 
 function context() {
@@ -74,6 +75,22 @@ describe("history/undo/redo commands", () => {
       await cli.parseAsync(["node", "pocketbase-cli", "--json", "redo"]);
       expect(app.state.hasRemoteAuth()).toBe(false);
       expect(app.state.config.auth_collection).toBe("admins");
+    } finally {
+      process.stdout.write = original;
+    }
+  });
+
+  it("rejects non-integer history limits", async () => {
+    const app = context();
+    const cli = createCli(app);
+
+    const original = process.stdout.write.bind(process.stdout);
+    process.stdout.write = (() => true) as typeof process.stdout.write;
+
+    try {
+      await expect(
+        cli.parseAsync(["node", "pocketbase-cli", "--json", "history", "--limit", "abc"])
+      ).rejects.toBeInstanceOf(CliExitError);
     } finally {
       process.stdout.write = original;
     }

@@ -26,11 +26,7 @@ export function parseConfigValue(key: string, raw: string): string | number | nu
   }
 
   if (INT_CONFIG_KEYS.has(key)) {
-    const value = Number.parseInt(raw, 10);
-    if (Number.isNaN(value)) {
-      throw new Error(`${key} expects an integer value`);
-    }
-    return value;
+    return parseIntegerOptionValue(key, raw);
   }
 
   if (key === "base_url") {
@@ -43,6 +39,20 @@ export function parseConfigValue(key: string, raw: string): string | number | nu
 export function quoteForHistory(value: string): string {
   if (!value || /[\s"'\\]/u.test(value)) {
     return `'${value.replace(/'/gu, `'\\''`)}'`;
+  }
+
+  return value;
+}
+
+export function parseIntegerOptionValue(name: string, raw: string): number {
+  const trimmed = raw.trim();
+  if (!/^-?\d+$/u.test(trimmed)) {
+    throw new Error(`${name} expects an integer value`);
+  }
+
+  const value = Number.parseInt(trimmed, 10);
+  if (!Number.isSafeInteger(value)) {
+    throw new Error(`${name} expects an integer value`);
   }
 
   return value;

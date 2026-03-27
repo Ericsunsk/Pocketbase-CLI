@@ -3,6 +3,7 @@ import { Command } from "commander";
 import { AppContext, clearRemoteAuthIfConfigTargetChanged, recordCommand } from "../app/context";
 import type { CommandDefinition } from "../contract/command-registry";
 import { emitError, emitSuccess } from "../core/output";
+import { parseIntegerOptionValue } from "../input/validators";
 
 function createUndoDefinition(context: AppContext): CommandDefinition {
   return {
@@ -109,8 +110,18 @@ function createHistoryDefinition(context: AppContext): CommandDefinition {
         .description("Show recent command history")
         .option("--limit <n>", "Number of items to show", "20")
         .action((options: { limit?: string }) => {
-          const parsedLimit = Number.parseInt(options.limit ?? "20", 10);
-          const limit = Number.isNaN(parsedLimit) ? 20 : Math.max(parsedLimit, 1);
+          let parsedLimit: number;
+          try {
+            parsedLimit = parseIntegerOptionValue("--limit", options.limit ?? "20");
+          } catch (error) {
+            emitError({
+              jsonOutput: context.jsonMode,
+              action: "history",
+              message: error instanceof Error ? error.message : String(error),
+              errorType: "invalid_input"
+            });
+          }
+          const limit = Math.max(parsedLimit, 1);
           const items = context.state.commandHistory.slice(-limit);
 
           emitSuccess({

@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -23,6 +23,24 @@ function buildContext() {
     jsonMode: false,
     store,
     state
+  };
+}
+
+function captureStdout(): { output: string[]; restore: () => void } {
+  const output: string[] = [];
+  const original = process.stdout.write.bind(process.stdout);
+
+  vi.spyOn(process.stdout, "write").mockImplementation((chunk: string | Uint8Array) => {
+    output.push(String(chunk));
+    return true;
+  });
+
+  return {
+    output,
+    restore: () => {
+      (process.stdout.write as unknown as ReturnType<typeof vi.spyOn>).mockRestore?.();
+      process.stdout.write = original as typeof process.stdout.write;
+    }
   };
 }
 
@@ -65,6 +83,7 @@ describe("backups commands", () => {
 
   it("downloads a backup archive and writes it to disk", async () => {
     const context = buildContext();
+    context.jsonMode = true;
     const tempDir = await createTempDir();
     tempDirs.push(tempDir);
     const outputPath = join(tempDir, "downloads", "snapshot.zip");
@@ -89,8 +108,13 @@ describe("backups commands", () => {
     const definition = createBackupsDefinition(context);
     const downloadDefinition = definition.children?.find((child) => child.name === "download");
     const command = downloadDefinition?.build?.();
+    const capture = captureStdout();
 
-    await command?.parseAsync(["node", "download", "snapshot.zip", "--output", outputPath]);
+    try {
+      await command?.parseAsync(["node", "download", "snapshot.zip", "--output", outputPath]);
+    } finally {
+      capture.restore();
+    }
 
     expect(tokenSpy).toHaveBeenCalledOnce();
     expect(downloadSpy).toHaveBeenCalledWith({
@@ -98,6 +122,18 @@ describe("backups commands", () => {
       token: "generated-token"
     });
     expect(Array.from(await readFile(outputPath))).toEqual([7, 8, 9]);
+    expect((await stat(outputPath)).mode & 0o777).toBe(0o600);
+
+    const payload = JSON.parse(capture.output.join("").trim()) as {
+      data: Record<string, unknown>;
+    };
+    expect(payload.data).toMatchObject({
+      status: 200,
+      path: outputPath,
+      size: 3,
+      name: "snapshot.zip"
+    });
+    expect(payload.data).not.toHaveProperty("url");
   });
 
   it("protects existing download output unless --overwrite is passed", async () => {

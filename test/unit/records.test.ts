@@ -419,4 +419,30 @@ describe("records commands", () => {
       CliExitError
     );
   });
+
+  it("rejects invalid delete-by-filter expect-count values before deleting", async () => {
+    const context = buildContext();
+    const listSpy = vi.spyOn(PocketBaseRemoteClient.prototype, "recordsList");
+    const deleteSpy = vi.spyOn(PocketBaseRemoteClient.prototype, "recordsDelete");
+
+    const definition = createRecordsDefinition(context);
+    const deleteDefinition = definition.children?.find((child) => child.name === "delete-by-filter");
+    const command = deleteDefinition?.build?.();
+
+    await expect(
+      command?.parseAsync([
+        "node",
+        "delete-by-filter",
+        "posts",
+        "--filter",
+        'status = "inactive"',
+        "--expect-count",
+        "1foo",
+        "--yes"
+      ])
+    ).rejects.toBeInstanceOf(CliExitError);
+
+    expect(listSpy).not.toHaveBeenCalled();
+    expect(deleteSpy).not.toHaveBeenCalled();
+  });
 });
