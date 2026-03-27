@@ -6,6 +6,10 @@ import { emitError, emitSuccess } from "../core/output";
 import { PocketBaseRemoteError, type RemoteResult } from "../http/remote-client";
 import { loadJsonObjectInput } from "../input/json-input";
 import {
+  parseCollectionEnsurePayload,
+  parseCollectionsImportPayload
+} from "../input/remote-payloads";
+import {
   buildRemoteClient,
   fetchAllPages,
   handleRemoteError,
@@ -213,34 +217,6 @@ function normalizeEnsurePolicies(options: {
     ifMissing,
     outputMode
   };
-}
-
-function validateEnsureBody(body: Record<string, unknown>): {
-  body: Record<string, unknown>;
-  lookupName: string;
-} {
-  const name = body.name;
-  if (typeof name !== "string" || !name.trim()) {
-    throw new Error("collections.ensure payload must include a non-empty `name`");
-  }
-
-  const normalizedName = name.trim();
-  return {
-    body: {
-      ...body,
-      name: normalizedName
-    },
-    lookupName: normalizedName
-  };
-}
-
-function validateImportBody(body: Record<string, unknown>): Record<string, unknown> {
-  const collections = body.collections;
-  if (!Array.isArray(collections) || collections.length === 0) {
-    throw new Error("Collections import payload must contain a non-empty `collections` array");
-  }
-
-  return body;
 }
 
 async function loadJsonActionBody(
@@ -502,7 +478,7 @@ function createCollectionsEnsureDefinition(context: AppContext): CommandDefiniti
 
             try {
               body = await loadBody("collections.ensure", input);
-              ({ body, lookupName } = validateEnsureBody(body));
+              ({ body, lookupName } = parseCollectionEnsurePayload(body));
               ({ ifExists, ifMissing, outputMode } = normalizeEnsurePolicies(input));
             } catch (error) {
               emitError({
@@ -801,7 +777,7 @@ export function createCollectionsDefinition(context: AppContext): CommandDefinit
         summary: "Import collections payload",
         successMessage: "Collections import completed",
         historyCommand: "collections import",
-        validateBody: validateImportBody,
+        validateBody: parseCollectionsImportPayload,
         run: (client, body) => client.collectionsImport({ body })
       }),
       {

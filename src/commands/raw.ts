@@ -1,24 +1,31 @@
 import { Command } from "commander";
 
-import { AppContext, recordCommand, resolveAuthCollection, resolveBaseUrl } from "../app/context";
+import { AppContext, recordCommand } from "../app/context";
 import type { CommandDefinition } from "../contract/command-registry";
 import { emitError, emitSuccess } from "../core/output";
-import { PocketBaseRemoteClient, PocketBaseRemoteError } from "../http/remote-client";
+import { PocketBaseRemoteError } from "../http/remote-client";
 import { loadOptionalJsonObjectInput } from "../input/json-input";
+import { buildRemoteClient } from "./support";
 
 function buildRawHistoryCommand(
   method: string,
   path: string,
   filePath?: string,
-  stdinJson?: boolean
+  stdinJson?: boolean,
+  withAuth?: boolean
 ): string {
+  const parts = ["raw", method.toUpperCase(), path];
+
   if (filePath === "-") {
-    return `raw ${method.toUpperCase()} ${path} --file -`;
+    parts.push("--file", "-");
+  } else if (stdinJson) {
+    parts.push("--stdin-json");
   }
-  if (stdinJson) {
-    return `raw ${method.toUpperCase()} ${path} --stdin-json`;
+  if (withAuth) {
+    parts.push("--with-auth");
   }
-  return `raw ${method.toUpperCase()} ${path}`;
+
+  return parts.join(" ");
 }
 
 export function createRawDefinition(context: AppContext): CommandDefinition {
@@ -27,7 +34,7 @@ export function createRawDefinition(context: AppContext): CommandDefinition {
     path: "raw",
     kind: "command",
     summary: "Send a raw PocketBase HTTP request",
-    authRequired: false,
+    authRequired: "conditional",
     destructive: false,
     confirmationRequired: false,
     parameters: [
@@ -74,6 +81,16 @@ export function createRawDefinition(context: AppContext): CommandDefinition {
         is_flag: true,
         nargs: 1,
         type: "BOOLEAN"
+      },
+      {
+        kind: "option",
+        name: "--with-auth",
+        names: ["--with-auth"],
+        required: false,
+        takes_value: false,
+        is_flag: true,
+        nargs: 1,
+        type: "BOOLEAN"
       }
     ],
     build: () =>
@@ -84,14 +101,16 @@ export function createRawDefinition(context: AppContext): CommandDefinition {
         .option("--data <json>", "JSON object body")
         .option("--file <path>", "Path to a JSON file or `-` to read the body from stdin")
         .option("--stdin-json", "Read the JSON object body from stdin")
+        .option("--with-auth", "Attach the saved remote auth token to the request")
         .action(async (method: string, path: string, options: {
           data?: string;
           file?: string;
           stdinJson?: boolean;
+          withAuth?: boolean;
         }) => {
           await recordCommand(
             context,
-            buildRawHistoryCommand(method, path, options.file, options.stdinJson)
+            buildRawHistoryCommand(method, path, options.file, options.stdinJson, options.withAuth)
           );
 
           let body: Record<string, unknown> | null = null;
@@ -110,23 +129,9 @@ export function createRawDefinition(context: AppContext): CommandDefinition {
             });
           }
 
-          const baseUrl = resolveBaseUrl(context);
-          if (!baseUrl) {
-            emitError({
-              jsonOutput: context.jsonMode,
-              action: "raw",
-              message: "Base URL is required. Run `config set base_url <url>` first.",
-              errorType: "missing_prerequisite",
-              hint: "Persist a PocketBase base URL with `config set base_url <url>` first.",
-              missingPrerequisite: "base_url"
-            });
-          }
-
-          const client = new PocketBaseRemoteClient({
-            baseUrl,
-            token: context.state.remoteAuth.token,
-            collection: resolveAuthCollection(context),
-            timeout: context.state.config.timeout ?? null
+          const client = buildRemoteClient(context, {
+            action: "raw",
+            requireAuth: Boolean(options.withAuth)
           });
 
           try {
@@ -134,7 +139,8 @@ export function createRawDefinition(context: AppContext): CommandDefinition {
               method,
               path,
               body: body ?? undefined,
-              requireAuth: false
+              requireAuth: Boolean(options.withAuth),
+              includeAuth: Boolean(options.withAuth)
             });
 
             emitSuccess({

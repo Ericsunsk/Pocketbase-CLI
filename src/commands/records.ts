@@ -1,14 +1,12 @@
-import { stat } from "node:fs/promises";
-import { homedir } from "node:os";
-import { join } from "node:path";
-
 import { Command } from "commander";
 
-import { AppContext, recordCommand, saveContextState } from "../app/context";
+import { AppContext, recordCommand } from "../app/context";
 import type { CommandDefinition, CommandParameter } from "../contract/command-registry";
 import { emitError, emitSuccess } from "../core/output";
 import type { RemoteResult } from "../http/remote-client";
 import { loadOptionalJsonObjectInput } from "../input/json-input";
+import { loadRecordMutationInput as loadSharedRecordMutationInput } from "../input/record-input";
+import { saveRemoteAuthResult } from "./auth-support";
 import {
   buildRemoteClient,
   fetchAllPages,
@@ -275,11 +273,6 @@ type RecordMutationOptions = {
   binaryFile?: string[];
 };
 
-type ParsedBinaryFile = {
-  fieldName: string;
-  filePath: string;
-};
-
 function redactCommand(parts: string[], sensitiveIndexes?: Set<number>): string {
   if (!sensitiveIndexes || sensitiveIndexes.size === 0) {
     return parts.join(" ");
@@ -290,80 +283,20 @@ function redactCommand(parts: string[], sensitiveIndexes?: Set<number>): string 
     .join(" ");
 }
 
-function expandHomePath(value: string): string {
-  return value.startsWith("~/") ? join(homedir(), value.slice(2)) : value;
-}
-
-async function parseBinaryFileInputs(
-  binaryFiles: string[],
-  action: string
-): Promise<ParsedBinaryFile[]> {
-  const parsed: ParsedBinaryFile[] = [];
-
-  for (const item of binaryFiles) {
-    if (!item.includes("=")) {
-      throw new Error(`${action} expected \`--binary-file\` in \`<field>=<path>\` format.`);
-    }
-
-    const [fieldNameRaw, pathRaw] = item.split("=", 2);
-    const fieldName = fieldNameRaw.trim();
-    const pathValue = pathRaw.trim();
-
-    if (!fieldName) {
-      throw new Error(
-        `${action} expected \`--binary-file\` field name in \`<field>=<path>\` format.`
-      );
-    }
-    if (!pathValue) {
-      throw new Error(`${action} expected \`--binary-file\` path in \`<field>=<path>\` format.`);
-    }
-
-    const filePath = expandHomePath(pathValue);
-    const fileStats = await stat(filePath).catch((error: unknown) => {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-        throw new Error(`${action} binary file does not exist: ${filePath}`);
-      }
-      throw error;
-    });
-
-    if (!fileStats.isFile()) {
-      throw new Error(`${action} binary upload path is not a file: ${filePath}`);
-    }
-
-    parsed.push({
-      fieldName,
-      filePath
-    });
-  }
-
-  return parsed;
-}
-
 async function loadRecordMutationInput(
   action: string,
   options: RecordMutationOptions
 ): Promise<{
   body: Record<string, unknown>;
-  binaryFiles: ParsedBinaryFile[];
+  binaryFiles: Array<{ fieldName: string; filePath: string }>;
 }> {
-  const body = await loadOptionalJsonObjectInput({
+  return loadSharedRecordMutationInput({
     data: options.data,
     filePath: options.file,
     stdinJson: options.stdinJson,
+    binaryFiles: options.binaryFile ?? [],
     action
   });
-  const binaryFiles = await parseBinaryFileInputs(options.binaryFile ?? [], action);
-
-  if (body === null && binaryFiles.length === 0) {
-    throw new Error(
-      `${action} requires JSON input (\`--data\`, \`--file\`, \`--stdin-json\`) or at least one \`--binary-file\`.`
-    );
-  }
-
-  return {
-    body: body ?? {},
-    binaryFiles
-  };
 }
 
 function buildMutationHistory(
@@ -389,31 +322,6 @@ function buildMutationHistory(
   return historyParts.join(" ");
 }
 
-function extractAuthPayload(
-  result: RemoteResult<unknown>,
-  action: string
-): { token: string; record: Record<string, unknown> } {
-  const payload =
-    result.data && typeof result.data === "object" && !Array.isArray(result.data)
-      ? (result.data as Record<string, unknown>)
-      : {};
-
-  const token = payload.token;
-  const record = payload.record;
-
-  if (typeof token !== "string" || !token.trim()) {
-    throw new Error(`${action} response did not include a usable token`);
-  }
-  if (record !== undefined && (record === null || typeof record !== "object" || Array.isArray(record))) {
-    throw new Error(`${action} response contained an invalid record payload`);
-  }
-
-  return {
-    token,
-    record: (record as Record<string, unknown> | undefined) ?? {}
-  };
-}
-
 function extractMfaPayload(
   result: RemoteResult<unknown>,
   action: string
@@ -432,37 +340,6 @@ function extractMfaPayload(
   }
 
   return { mfaId };
-}
-
-async function saveRecordAuthResult(
-  context: AppContext,
-  options: {
-    result: RemoteResult<unknown>;
-    action: string;
-    baseUrl: string;
-    collection: string;
-  }
-): Promise<void> {
-  let payload: { token: string; record: Record<string, unknown> };
-
-  try {
-    payload = extractAuthPayload(options.result, options.action);
-  } catch (error) {
-    emitError({
-      jsonOutput: context.jsonMode,
-      action: options.action.replace(/ /gu, "."),
-      message: error instanceof Error ? error.message : String(error),
-      data: options.result
-    });
-  }
-
-  context.state.setRemoteAuth({
-    baseUrl: options.baseUrl,
-    token: payload.token,
-    record: payload.record,
-    collection: options.collection
-  });
-  await saveContextState(context);
 }
 
 async function emitRecordAuthOrMfaResult(
@@ -505,7 +382,7 @@ async function emitRecordAuthOrMfaResult(
   }
 
   if (options.saveAuth) {
-    await saveRecordAuthResult(context, {
+    await saveRemoteAuthResult(context, {
       result: options.result,
       action: options.action.replace(/\./gu, " "),
       baseUrl: options.baseUrl,

@@ -1,6 +1,6 @@
 import { Command } from "commander";
 
-import { AppContext, recordCommand } from "../app/context";
+import { AppContext, clearRemoteAuthIfConfigTargetChanged, recordCommand } from "../app/context";
 import type { CommandDefinition } from "../contract/command-registry";
 import { emitError, emitSuccess } from "../core/output";
 
@@ -19,12 +19,18 @@ function createUndoDefinition(context: AppContext): CommandDefinition {
         .action(async () => {
           try {
             const payload = context.state.undo();
+            const authChange = clearRemoteAuthIfConfigTargetChanged(context);
             await recordCommand(context, "undo");
             emitSuccess({
               jsonOutput: context.jsonMode,
               action: "undo",
-              message: "Undo applied",
-              data: payload
+              message: authChange.auth_cleared
+                ? "Undo applied and saved auth cleared"
+                : "Undo applied",
+              data: {
+                ...payload,
+                ...authChange
+              }
             });
           } catch (error) {
             emitError({
@@ -52,12 +58,18 @@ function createRedoDefinition(context: AppContext): CommandDefinition {
         .action(async () => {
           try {
             const payload = context.state.redo();
+            const authChange = clearRemoteAuthIfConfigTargetChanged(context);
             await recordCommand(context, "redo");
             emitSuccess({
               jsonOutput: context.jsonMode,
               action: "redo",
-              message: "Redo applied",
-              data: payload
+              message: authChange.auth_cleared
+                ? "Redo applied and saved auth cleared"
+                : "Redo applied",
+              data: {
+                ...payload,
+                ...authChange
+              }
             });
           } catch (error) {
             emitError({

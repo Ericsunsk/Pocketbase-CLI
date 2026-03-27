@@ -11,7 +11,9 @@
 - JSON error envelope shape with `meta` and structured `error`
 - JSON output shape for `history`
 - JSON REPL stream remains parseable without prompt pollution
-- `raw GET /api/health`
+- REPL history redacts explicit `files url --token` and `backups download --token` values
+- `raw GET /api/health` stays anonymous by default
+- `raw GET /api/health --with-auth` attaches the saved auth token explicitly
 - Collections commands fail cleanly before login
 - Remote superuser login persists session state across CLI invocations
 - Remote `auth login --password-stdin`
@@ -24,6 +26,8 @@
 - Remote `collections ensure --if-exists fail`
 - Remote `collections ensure --if-missing fail`
 - Remote `collections ensure --output summary`
+- `config set` clears saved auth when the configured target no longer matches
+- `undo` / `redo` also clear saved auth when they restore a conflicting target
 - Remote `records auth-methods|auth-password|auth-oauth2|auth-refresh|request-otp|auth-otp|request-password-reset|confirm-password-reset|request-verification|confirm-verification|request-email-change|confirm-email-change|impersonate|create|get|list|update|delete`
 - Remote `records list --all`
 - Destructive command confirmations via `--yes`

@@ -22,6 +22,14 @@ function timeoutValue(context: AppContext): number | null {
   return context.state.config.timeout ?? null;
 }
 
+function normalizeBaseUrl(value?: string | null): string | null {
+  if (!value) {
+    return null;
+  }
+
+  return String(value).replace(/\/+$/, "");
+}
+
 export function buildRemoteClient(
   context: AppContext,
   options?: {
@@ -33,6 +41,7 @@ export function buildRemoteClient(
 ): PocketBaseRemoteClient {
   const action = options?.action ?? "remote";
   const baseUrl = resolveBaseUrl(context, options?.baseUrl);
+  const collection = resolveAuthCollection(context, options?.collection);
 
   if (!baseUrl) {
     emitError({
@@ -46,7 +55,26 @@ export function buildRemoteClient(
     });
   }
 
-  const token = context.state.remoteAuth.token ?? null;
+  const authBaseUrl = normalizeBaseUrl(context.state.remoteAuth.base_url);
+  const authCollection = String(context.state.remoteAuth.collection ?? "_superusers");
+  const savedToken = context.state.remoteAuth.token ?? null;
+  const tokenMatchesTarget =
+    Boolean(savedToken) && authBaseUrl === baseUrl && authCollection === collection;
+  const token = tokenMatchesTarget ? savedToken : null;
+
+  if ((options?.requireAuth ?? true) && savedToken && !tokenMatchesTarget) {
+    emitError({
+      jsonOutput: context.jsonMode,
+      action,
+      message:
+        "Saved auth does not match the configured base URL or auth collection. Run `auth login` again.",
+      errorType: "missing_prerequisite",
+      hint:
+        "Re-authenticate after changing `base_url` or `auth_collection`, or clear the saved auth with `auth logout`.",
+      missingPrerequisite: "auth_login"
+    });
+  }
+
   if ((options?.requireAuth ?? true) && !token) {
     emitError({
       jsonOutput: context.jsonMode,
@@ -61,7 +89,7 @@ export function buildRemoteClient(
   return new PocketBaseRemoteClient({
     baseUrl,
     token,
-    collection: resolveAuthCollection(context, options?.collection),
+    collection,
     timeout: timeoutValue(context)
   });
 }

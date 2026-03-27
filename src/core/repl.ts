@@ -2,7 +2,8 @@ import { createInterface } from "node:readline/promises";
 import type { Interface as ReadLineInterface } from "node:readline/promises";
 import type { Writable } from "node:stream";
 
-import { AppContext, saveContextState } from "../app/context";
+import { AppContext, clearRemoteAuthIfConfigTargetChanged, saveContextState } from "../app/context";
+import { CliExitError } from "./output";
 import { isConfigKey, parseConfigValue } from "../input/validators";
 
 type WriteTarget = Pick<Writable, "write">;
@@ -98,6 +99,26 @@ export function sanitizeHistoryTokens(tokens: string[]): string {
   }
 
   if (tokens[0] !== "records") {
+    if (tokens[0] === "files" && tokens[1] === "url") {
+      const rendered = [...tokens];
+      for (let index = 0; index < rendered.length - 1; index += 1) {
+        if (rendered[index] === "--token") {
+          rendered[index + 1] = "********";
+        }
+      }
+      return rendered.join(" ");
+    }
+
+    if (tokens[0] === "backups" && tokens[1] === "download") {
+      const rendered = [...tokens];
+      for (let index = 0; index < rendered.length - 1; index += 1) {
+        if (rendered[index] === "--token") {
+          rendered[index + 1] = "********";
+        }
+      }
+      return rendered.join(" ");
+    }
+
     return tokens.join(" ");
   }
 
@@ -294,6 +315,10 @@ export class PocketBaseRepl {
         try {
           await this.dispatch(tokens);
         } catch (error) {
+          if (error instanceof CliExitError) {
+            continue;
+          }
+
           this.emit({
             ok: false,
             action: "repl.dispatch",
@@ -368,12 +393,18 @@ export class PocketBaseRepl {
   private async handleUndo(): Promise<void> {
     try {
       const payload = this.context.state.undo();
+      const authChange = clearRemoteAuthIfConfigTargetChanged(this.context);
       await this.persistState();
       this.emit({
         ok: true,
         action: "undo",
-        message: "Undo applied",
-        data: payload
+        message: authChange.auth_cleared
+          ? "Undo applied and saved auth cleared"
+          : "Undo applied",
+        data: {
+          ...payload,
+          ...authChange
+        }
       });
     } catch (error) {
       this.emit({
@@ -387,12 +418,18 @@ export class PocketBaseRepl {
   private async handleRedo(): Promise<void> {
     try {
       const payload = this.context.state.redo();
+      const authChange = clearRemoteAuthIfConfigTargetChanged(this.context);
       await this.persistState();
       this.emit({
         ok: true,
         action: "redo",
-        message: "Redo applied",
-        data: payload
+        message: authChange.auth_cleared
+          ? "Redo applied and saved auth cleared"
+          : "Redo applied",
+        data: {
+          ...payload,
+          ...authChange
+        }
       });
     } catch (error) {
       this.emit({
@@ -434,12 +471,18 @@ export class PocketBaseRepl {
 
         const value = parseConfigValue(key, rawValue);
         const payload = this.context.state.setConfig(key, value);
+        const authChange = clearRemoteAuthIfConfigTargetChanged(this.context);
         await this.persistState();
         this.emit({
           ok: true,
           action: "config.set",
-          message: "Config updated",
-          data: payload
+          message: authChange.auth_cleared
+            ? "Config updated and saved auth cleared"
+            : "Config updated",
+          data: {
+            ...payload,
+            ...authChange
+          }
         });
       } catch (error) {
         this.emit({
@@ -468,12 +511,18 @@ export class PocketBaseRepl {
         }
 
         const payload = this.context.state.unsetConfig(key);
+        const authChange = clearRemoteAuthIfConfigTargetChanged(this.context);
         await this.persistState();
         this.emit({
           ok: true,
           action: "config.unset",
-          message: "Config removed",
-          data: payload
+          message: authChange.auth_cleared
+            ? "Config removed and saved auth cleared"
+            : "Config removed",
+          data: {
+            ...payload,
+            ...authChange
+          }
         });
       } catch (error) {
         this.emit({

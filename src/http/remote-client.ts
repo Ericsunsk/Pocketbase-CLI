@@ -688,10 +688,12 @@ export class PocketBaseRemoteClient {
     path: string;
     body?: Record<string, unknown> | null;
     requireAuth?: boolean;
+    includeAuth?: boolean;
   }): Promise<RemoteResult<unknown>> {
     return this.request(options.method.toUpperCase(), options.path, {
       body: options.body ?? undefined,
-      requireAuth: options.requireAuth ?? false
+      requireAuth: options.requireAuth ?? false,
+      includeAuth: options.includeAuth
     });
   }
 
@@ -702,6 +704,7 @@ export class PocketBaseRemoteClient {
       body?: Record<string, unknown>;
       query?: Record<string, QueryValue>;
       requireAuth?: boolean;
+      includeAuth?: boolean;
       allowedStatuses?: Set<number>;
     }
   ): Promise<RemoteResult<TData>> {
@@ -709,6 +712,7 @@ export class PocketBaseRemoteClient {
       body: options?.body === undefined ? undefined : JSON.stringify(options.body),
       query: options?.query,
       requireAuth: options?.requireAuth,
+      includeAuth: options?.includeAuth,
       allowedStatuses: options?.allowedStatuses,
       headers: options?.body === undefined ? undefined : { "Content-Type": "application/json" }
     });
@@ -779,6 +783,7 @@ export class PocketBaseRemoteClient {
       fileFields: Array<{ fieldName: string; filePath: string }>;
       query?: Record<string, QueryValue>;
       requireAuth?: boolean;
+      includeAuth?: boolean;
       allowedStatuses?: Set<number>;
     }
   ): Promise<RemoteResult<TData>> {
@@ -791,6 +796,7 @@ export class PocketBaseRemoteClient {
       body: formData,
       query: options.query,
       requireAuth: options.requireAuth,
+      includeAuth: options.includeAuth,
       allowedStatuses: options.allowedStatuses
     });
   }
@@ -802,6 +808,7 @@ export class PocketBaseRemoteClient {
       body?: BodyInit;
       query?: Record<string, QueryValue>;
       requireAuth: boolean;
+      includeAuth: boolean;
       allowedStatuses?: Set<number>;
       accept: string;
       headers?: Record<string, string>;
@@ -824,7 +831,7 @@ export class PocketBaseRemoteClient {
       "User-Agent": this.userAgent,
       ...(options.headers ?? {})
     };
-    if (this.token) {
+    if (options.includeAuth && this.token) {
       headers.Authorization = this.token;
     }
 
@@ -886,6 +893,7 @@ export class PocketBaseRemoteClient {
       body?: BodyInit;
       query?: Record<string, QueryValue>;
       requireAuth?: boolean;
+      includeAuth?: boolean;
       allowedStatuses?: Set<number>;
       headers?: Record<string, string>;
     }
@@ -907,7 +915,7 @@ export class PocketBaseRemoteClient {
       "User-Agent": this.userAgent,
       ...(options?.headers ?? {})
     };
-    if (this.token) {
+    if ((options?.includeAuth ?? options?.requireAuth ?? false) && this.token) {
       headers.Authorization = this.token;
     }
 
@@ -972,6 +980,7 @@ export class PocketBaseRemoteClient {
       body?: BodyInit;
       query?: Record<string, QueryValue>;
       requireAuth?: boolean;
+      includeAuth?: boolean;
       allowedStatuses?: Set<number>;
       headers?: Record<string, string>;
     }
@@ -980,6 +989,7 @@ export class PocketBaseRemoteClient {
       body: options?.body,
       query: options?.query,
       requireAuth: options?.requireAuth ?? false,
+      includeAuth: options?.includeAuth ?? options?.requireAuth ?? false,
       allowedStatuses: options?.allowedStatuses,
       accept: "application/json",
       headers: options?.headers

@@ -41,6 +41,7 @@ All operational commands use PocketBase's HTTP API against a remote deployment. 
 - Supported persisted config keys are `base_url`, `auth_collection`, and `timeout`.
 - JSON output now exposes a stable envelope with `meta`, `result`, structured `error`, `http`, and `pagination`.
 - `files url` is a helper that builds PocketBase file URLs and can optionally fetch a temporary file token via `/api/files/token`.
+- `raw` stays anonymous unless `--with-auth` is passed explicitly.
 - `logs stats` wraps `/api/logs/stats` for quick operational summaries without falling back to `raw`.
 - `crons` wraps `/api/crons` list/run operations.
 - `collections` now covers the documented remote collection management routes instead of only list/get.
@@ -55,5 +56,6 @@ All operational commands use PocketBase's HTTP API against a remote deployment. 
 - `backups delete` and `backups restore` are intentionally guarded by `--yes`.
 - `collections delete`, `collections truncate`, `records delete`, `records delete-by-filter`, and `crons run` are also intentionally guarded by `--yes`.
 - `batch run` wraps `/api/batch` for JSON-based record batch mutations and supports `--data`, `--file`, `--file -`, or `--stdin-json`.
+- Updating persisted `base_url` or `auth_collection` clears saved auth state when the saved session no longer targets the configured instance.
 - Local process-oriented commands are intentionally removed from the CLI model because they are not meaningful for a remote VPS deployment.
 - Remaining deliberate gaps relative to the official docs are `realtime`.

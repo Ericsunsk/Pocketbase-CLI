@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { AppContext } from "../../src/app/context";
 import { PocketBaseRepl, ReplEofError, sanitizeHistoryTokens } from "../../src/core/repl";
+import { CliExitError } from "../../src/core/output";
 import { SessionState, SessionStore } from "../../src/core/session-store";
 
 function createContext(): AppContext {
@@ -56,6 +57,26 @@ describe("sanitizeHistoryTokens", () => {
     ).toBe(
       "records auth-oauth2 users --provider google --code ******** --redirect-url https://app.example.com/callback --code-verifier ********"
     );
+    expect(
+      sanitizeHistoryTokens([
+        "files",
+        "url",
+        "users",
+        "rec1",
+        "avatar.png",
+        "--token",
+        "secret-token"
+      ])
+    ).toBe("files url users rec1 avatar.png --token ********");
+    expect(
+      sanitizeHistoryTokens([
+        "backups",
+        "download",
+        "nightly.zip",
+        "--token",
+        "secret-token"
+      ])
+    ).toBe("backups download nightly.zip --token ********");
   });
 });
 
@@ -157,5 +178,85 @@ describe("PocketBaseRepl", () => {
 
     expect(saveState).toHaveBeenCalledTimes(3);
     expect(dispatch).toHaveBeenCalledWith(["info"]);
+  });
+
+  it("clears saved auth when built-in config set changes the target", async () => {
+    const context = createContext();
+    context.state.setRemoteAuth({
+      baseUrl: "https://prod.example.com",
+      token: "secret-token",
+      collection: "_superusers"
+    });
+    const stdout: string[] = [];
+    const lines = ["config set base_url https://staging.example.com", "quit"];
+
+    const repl = new PocketBaseRepl({
+      context,
+      dispatch: async () => undefined,
+      jsonOutput: true,
+      stdout: createWriter(stdout),
+      stderr: createWriter([]),
+      saveState: async () => undefined,
+      readLine: async () => {
+        const line = lines.shift();
+        if (line === undefined) {
+          throw new ReplEofError();
+        }
+        return line;
+      }
+    });
+
+    await repl.run();
+
+    const payloads = stdout
+      .join("")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+    const configSetPayload = payloads.find((payload) => payload.action === "config.set");
+
+    expect(configSetPayload).toMatchObject({
+      message: "Config updated and saved auth cleared",
+      data: {
+        auth_cleared: true
+      }
+    });
+    expect(context.state.hasRemoteAuth()).toBe(false);
+  });
+
+  it("does not emit a duplicate repl.dispatch error when a command already exited cleanly", async () => {
+    const context = createContext();
+    const stdout: string[] = [];
+    const stderr: string[] = [];
+    const lines = ["info", "quit"];
+
+    const repl = new PocketBaseRepl({
+      context,
+      dispatch: async () => {
+        throw new CliExitError(1, "command failed");
+      },
+      jsonOutput: true,
+      stdout: createWriter(stdout),
+      stderr: createWriter(stderr),
+      saveState: async () => undefined,
+      readLine: async () => {
+        const line = lines.shift();
+        if (line === undefined) {
+          throw new ReplEofError();
+        }
+        return line;
+      }
+    });
+
+    await repl.run();
+
+    const payloads = stdout
+      .join("")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+
+    expect(payloads.some((payload) => payload.action === "repl.dispatch")).toBe(false);
+    expect(stderr).toEqual([]);
   });
 });

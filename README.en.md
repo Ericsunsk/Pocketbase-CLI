@@ -94,12 +94,17 @@ node dist/bin.js
 - `batch run`
 - `files token|url`
 - `backups list|create|upload|delete|download|restore`
-- `raw <METHOD> <PATH>`
+- `raw <METHOD> <PATH> [--with-auth]`
 - `config show|set|unset`
 - `undo`
 - `redo`
 - `history`
 - `repl`
+
+## Behavior Notes
+
+- `raw` requests are anonymous by default. Pass `--with-auth` to attach the saved remote auth token explicitly.
+- Changing persisted `base_url` or `auth_collection` clears a saved auth session when it no longer matches the configured target.
 
 ## Scope
 

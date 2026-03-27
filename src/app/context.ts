@@ -35,11 +35,63 @@ export async function recordCommand(context: AppContext, commandLine: string): P
   }
 }
 
+function normalizeBaseUrl(value?: string | null): string | null {
+  if (!value) {
+    return null;
+  }
+
+  return String(value).replace(/\/+$/, "");
+}
+
+export function clearRemoteAuthIfConfigTargetChanged(context: AppContext): {
+  auth_cleared: boolean;
+  cleared_auth?: {
+    base_url: string | null;
+    collection: string;
+    reason_keys: string[];
+  };
+} {
+  if (!context.state.hasRemoteAuth()) {
+    return {
+      auth_cleared: false
+    };
+  }
+
+  const configuredBaseUrl = normalizeBaseUrl(context.state.config.base_url ?? null);
+  const configuredCollection = context.state.config.auth_collection ?? null;
+  const remoteAuthBaseUrl = normalizeBaseUrl(context.state.remoteAuth.base_url ?? null);
+  const remoteAuthCollection = String(context.state.remoteAuth.collection ?? "_superusers");
+  const reasonKeys: string[] = [];
+
+  if (configuredBaseUrl !== null && configuredBaseUrl !== remoteAuthBaseUrl) {
+    reasonKeys.push("base_url");
+  }
+  if (configuredCollection !== null && configuredCollection !== remoteAuthCollection) {
+    reasonKeys.push("auth_collection");
+  }
+
+  if (reasonKeys.length === 0) {
+    return {
+      auth_cleared: false
+    };
+  }
+
+  context.state.clearRemoteAuth();
+  return {
+    auth_cleared: true,
+    cleared_auth: {
+      base_url: remoteAuthBaseUrl,
+      collection: remoteAuthCollection,
+      reason_keys: reasonKeys
+    }
+  };
+}
+
 export function resolveBaseUrl(context: AppContext, baseUrl?: string | null): string | null {
   const resolved =
     baseUrl ??
-    context.state.remoteAuth.base_url ??
-    context.state.config.base_url;
+    context.state.config.base_url ??
+    context.state.remoteAuth.base_url;
 
   if (!resolved) {
     return null;
@@ -51,8 +103,8 @@ export function resolveBaseUrl(context: AppContext, baseUrl?: string | null): st
 export function resolveAuthCollection(context: AppContext, collection?: string | null): string {
   return String(
     collection ??
-      context.state.remoteAuth.collection ??
       context.state.config.auth_collection ??
+      context.state.remoteAuth.collection ??
       "_superusers"
   );
 }

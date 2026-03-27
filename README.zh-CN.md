@@ -94,12 +94,17 @@ node dist/bin.js
 - `batch run`
 - `files token|url`
 - `backups list|create|upload|delete|download|restore`
-- `raw <METHOD> <PATH>`
+- `raw <METHOD> <PATH> [--with-auth]`
 - `config show|set|unset`
 - `undo`
 - `redo`
 - `history`
 - `repl`
+
+## 行为说明
+
+- `raw` 默认按匿名请求发送，不会自动附带已保存的 token；只有显式传入 `--with-auth` 才会附带远程登录态。
+- 当持久化的 `base_url` 或 `auth_collection` 与当前已保存登录态不再匹配时，CLI 会自动清理该登录态。
 
 ## 能力边界
 

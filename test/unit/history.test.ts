@@ -55,4 +55,27 @@ describe("history/undo/redo commands", () => {
       process.stdout.write = original;
     }
   });
+
+  it("redo clears saved auth when the restored config target no longer matches", async () => {
+    const app = context();
+    app.state.setRemoteAuth({
+      baseUrl: "https://prod.example.com",
+      token: "secret-token",
+      collection: "_superusers"
+    });
+    app.state.setConfig("auth_collection", "admins");
+    app.state.undo();
+
+    const cli = createCli(app);
+    const original = process.stdout.write.bind(process.stdout);
+    process.stdout.write = (() => true) as typeof process.stdout.write;
+
+    try {
+      await cli.parseAsync(["node", "pocketbase-cli", "--json", "redo"]);
+      expect(app.state.hasRemoteAuth()).toBe(false);
+      expect(app.state.config.auth_collection).toBe("admins");
+    } finally {
+      process.stdout.write = original;
+    }
+  });
 });

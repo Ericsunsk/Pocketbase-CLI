@@ -1,8 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { PocketBaseRemoteClient, PocketBaseRemoteError } from "../../src/http/remote-client";
 
 describe("PocketBaseRemoteClient", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
   it("builds query strings compatibly", () => {
     const client = new PocketBaseRemoteClient({
       baseUrl: "https://pb.example.com",
@@ -59,5 +64,40 @@ describe("PocketBaseRemoteClient", () => {
         requireAuth: true
       })
     ).rejects.toBeInstanceOf(PocketBaseRemoteError);
+  });
+
+  it("only attaches Authorization when includeAuth is enabled", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      text: async () => "{}"
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = new PocketBaseRemoteClient({
+      baseUrl: "https://pb.example.com",
+      token: "secret-token"
+    });
+
+    await client.request("GET", "/api/health", {
+      requireAuth: false
+    });
+    await client.request("GET", "/api/health", {
+      requireAuth: false,
+      includeAuth: true
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+      headers: expect.not.objectContaining({
+        Authorization: "secret-token"
+      })
+    });
+    expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({
+      headers: expect.objectContaining({
+        Authorization: "secret-token"
+      })
+    });
   });
 });

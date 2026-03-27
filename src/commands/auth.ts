@@ -10,8 +10,9 @@ import {
 } from "../app/context";
 import type { CommandDefinition } from "../contract/command-registry";
 import { emitError, emitSuccess } from "../core/output";
-import { PocketBaseRemoteClient, PocketBaseRemoteError, RemoteResult } from "../http/remote-client";
+import { PocketBaseRemoteClient, PocketBaseRemoteError } from "../http/remote-client";
 import { readSecretFromStdin } from "../input/json-input";
+import { saveRemoteAuthResult } from "./auth-support";
 import { LOGIN_BASE_URL_REQUIRED_MESSAGE, buildRemoteClient, handleRemoteError, requireBaseUrl } from "./support";
 
 function redactCommand(parts: string[], sensitiveIndexes?: Set<number>): string {
@@ -22,63 +23,6 @@ function redactCommand(parts: string[], sensitiveIndexes?: Set<number>): string 
   return parts
     .map((part, index) => (sensitiveIndexes.has(index) ? "********" : part))
     .join(" ");
-}
-
-function extractAuthPayload(
-  result: RemoteResult<unknown>,
-  action: string
-): { token: string; record: Record<string, unknown> } {
-  const payload =
-    result.data && typeof result.data === "object" && !Array.isArray(result.data)
-      ? (result.data as Record<string, unknown>)
-      : {};
-
-  const token = payload.token;
-  const record = payload.record;
-
-  if (typeof token !== "string" || !token.trim()) {
-    throw new Error(`${action} response did not include a usable token`);
-  }
-
-  if (record !== undefined && (record === null || typeof record !== "object" || Array.isArray(record))) {
-    throw new Error(`${action} response contained an invalid record payload`);
-  }
-
-  return {
-    token,
-    record: (record as Record<string, unknown> | undefined) ?? {}
-  };
-}
-
-async function saveAuthResult(
-  context: AppContext,
-  options: {
-    result: RemoteResult<unknown>;
-    action: string;
-    baseUrl: string;
-    collection: string;
-  }
-): Promise<void> {
-  let payload: { token: string; record: Record<string, unknown> };
-
-  try {
-    payload = extractAuthPayload(options.result, options.action);
-  } catch (error) {
-    emitError({
-      jsonOutput: context.jsonMode,
-      action: options.action.replace(/ /gu, "."),
-      message: error instanceof Error ? error.message : String(error),
-      data: options.result
-    });
-  }
-
-  context.state.setRemoteAuth({
-    baseUrl: options.baseUrl,
-    token: payload.token,
-    record: payload.record,
-    collection: options.collection
-  });
-  await saveContextState(context);
 }
 
 async function confirmLogout(): Promise<boolean> {
@@ -262,7 +206,7 @@ function createAuthLoginDefinition(context: AppContext): CommandDefinition {
                 password: resolvedPassword
               });
 
-              await saveAuthResult(context, {
+              await saveRemoteAuthResult(context, {
                 result,
                 action: "auth login",
                 baseUrl,
@@ -419,7 +363,7 @@ function createAuthRefreshDefinition(context: AppContext): CommandDefinition {
 
           try {
             const result = await client.refresh();
-            await saveAuthResult(context, {
+            await saveRemoteAuthResult(context, {
               result,
               action: "auth refresh",
               baseUrl: client.baseUrl,

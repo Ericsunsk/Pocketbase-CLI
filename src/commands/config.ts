@@ -1,6 +1,6 @@
 import { Command } from "commander";
 
-import { AppContext, recordCommand } from "../app/context";
+import { AppContext, clearRemoteAuthIfConfigTargetChanged, recordCommand } from "../app/context";
 import type { CommandDefinition } from "../contract/command-registry";
 import { emitError, emitSuccess } from "../core/output";
 import { isConfigKey, parseConfigValue, quoteForHistory } from "../input/validators";
@@ -80,13 +80,19 @@ function createConfigSetCommand(context: AppContext): CommandDefinition {
           }
 
           const payload = context.state.setConfig(key, parsed);
+          const authChange = clearRemoteAuthIfConfigTargetChanged(context);
           await recordCommand(context, `config set ${key} ${quoteForHistory(value)}`);
 
           emitSuccess({
             jsonOutput: context.jsonMode,
             action: "config.set",
-            message: "Config updated",
-            data: payload
+            message: authChange.auth_cleared
+              ? "Config updated and saved auth cleared"
+              : "Config updated",
+            data: {
+              ...payload,
+              ...authChange
+            }
           });
         })
   };
@@ -124,13 +130,19 @@ function createConfigUnsetCommand(context: AppContext): CommandDefinition {
           }
 
           const payload = context.state.unsetConfig(key);
+          const authChange = clearRemoteAuthIfConfigTargetChanged(context);
           await recordCommand(context, `config unset ${key}`);
 
           emitSuccess({
             jsonOutput: context.jsonMode,
             action: "config.unset",
-            message: "Config removed",
-            data: payload
+            message: authChange.auth_cleared
+              ? "Config removed and saved auth cleared"
+              : "Config removed",
+            data: {
+              ...payload,
+              ...authChange
+            }
           });
         })
   };

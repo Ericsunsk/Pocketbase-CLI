@@ -36,11 +36,12 @@ npm i -g pocketbase-cli
 
 ```sh
 node dist/bin.js --help
-node dist/bin.js auth login
+printf 'Secret123\n' | node dist/bin.js auth login --password-stdin admin@example.com
 node dist/bin.js auth logout
 node dist/bin.js auth logout --yes
 node dist/bin.js config set base_url https://pb.example.com
-printf 'Secret123\n' | node dist/bin.js auth login --password-stdin admin@example.com
+node dist/bin.js raw GET /api/health
+node dist/bin.js raw GET /api/health --with-auth
 node dist/bin.js schema --json
 node dist/bin.js collections ensure --file collection.json
 node dist/bin.js collections ensure --file collection.json --if-exists fail
