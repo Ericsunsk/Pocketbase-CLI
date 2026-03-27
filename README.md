@@ -27,6 +27,7 @@ PocketBase CLI provides a consistent command surface for remote administration, 
 - [`FEATURES.md`](FEATURES.md): feature scope and behavior notes
 - [`DEVELOPMENT.md`](DEVELOPMENT.md): development notes
 - [`TESTING.md`](TESTING.md): validation commands and test coverage
+- [`CHANGELOG.md`](CHANGELOG.md): release notes and notable changes
 
 ## Quick Start
 
@@ -39,6 +40,12 @@ node dist/bin.js config set auth_collection _superusers
 printf 'Secret123\n' | node dist/bin.js auth login --password-stdin admin@example.com
 node dist/bin.js --json info
 ```
+
+## Automation
+
+- `CI` runs on pushes and pull requests targeting `main`
+- `Release` runs when a `v*.*.*` tag is pushed and publishes a GitHub Release with the packaged `.tgz` artifact
+- `Release` can also be triggered manually for an existing tag through `workflow_dispatch`
 
 ## Language Guides
 
