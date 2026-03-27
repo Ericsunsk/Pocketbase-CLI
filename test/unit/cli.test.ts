@@ -17,6 +17,7 @@ describe("createCli", () => {
       expect.arrayContaining([
         "repl",
         "info",
+        "preflight",
         "schema",
         "config",
         "auth",

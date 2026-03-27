@@ -2,6 +2,12 @@ import { Command } from "commander";
 
 import { AppContext, recordCommand } from "../app/context";
 import type { CommandDefinition, CommandParameter } from "../contract/command-registry";
+import {
+  createArgumentParameter,
+  createJsonInputParameters,
+  createObjectInputSchema,
+  createOptionParameter
+} from "../contract/metadata";
 import { emitError, emitSuccess } from "../core/output";
 import { PocketBaseRemoteError, type RemoteResult } from "../http/remote-client";
 import { loadJsonObjectInput } from "../input/json-input";
@@ -34,130 +40,59 @@ function parseNumber(value: string | undefined): number | undefined {
 
 function listParameters(): CommandParameter[] {
   return [
-    {
-      kind: "option",
+    createOptionParameter({
       name: "--page",
-      names: ["--page"],
-      required: false,
-      takes_value: true,
-      is_flag: false,
-      nargs: 1,
-      type: "INTEGER"
-    },
-    {
-      kind: "option",
+      type: "INTEGER",
+      help: "Page number for paginated collection listing"
+    }),
+    createOptionParameter({
       name: "--per-page",
-      names: ["--per-page"],
-      required: false,
-      takes_value: true,
-      is_flag: false,
-      nargs: 1,
-      type: "INTEGER"
-    },
-    {
-      kind: "option",
+      type: "INTEGER",
+      help: "Number of collections per page"
+    }),
+    createOptionParameter({
       name: "--filter",
-      names: ["--filter"],
-      required: false,
-      takes_value: true,
-      is_flag: false,
-      nargs: 1,
-      type: "TEXT"
-    },
-    {
-      kind: "option",
+      type: "TEXT",
+      help: "PocketBase filter expression"
+    }),
+    createOptionParameter({
       name: "--sort",
-      names: ["--sort"],
-      required: false,
-      takes_value: true,
-      is_flag: false,
-      nargs: 1,
-      type: "TEXT"
-    },
-    {
-      kind: "option",
+      type: "TEXT",
+      help: "PocketBase sort expression"
+    }),
+    createOptionParameter({
       name: "--all",
-      names: ["--all"],
-      required: false,
-      takes_value: false,
-      is_flag: true,
-      nargs: 1,
-      type: "BOOLEAN"
-    }
-  ];
-}
-
-function jsonInputParameters(): CommandParameter[] {
-  return [
-    {
-      kind: "option",
-      name: "--data",
-      names: ["--data"],
-      required: false,
-      takes_value: true,
-      is_flag: false,
-      nargs: 1,
-      type: "TEXT"
-    },
-    {
-      kind: "option",
-      name: "--file",
-      names: ["--file"],
-      required: false,
-      takes_value: true,
-      is_flag: false,
-      nargs: 1,
-      type: "TEXT"
-    },
-    {
-      kind: "option",
-      name: "--stdin-json",
-      names: ["--stdin-json"],
-      required: false,
-      takes_value: false,
-      is_flag: true,
-      nargs: 1,
-      type: "BOOLEAN"
-    }
+      type: "BOOLEAN",
+      help: "Fetch every page and merge the result into a single payload",
+      isFlag: true
+    })
   ];
 }
 
 function ensureParameters(): CommandParameter[] {
   return [
-    ...jsonInputParameters(),
-    {
-      kind: "option",
+    ...createJsonInputParameters(),
+    createOptionParameter({
       name: "--if-exists",
-      names: ["--if-exists"],
-      required: false,
-      takes_value: true,
-      is_flag: false,
-      nargs: 1,
+      type: "TEXT",
+      help: "Behavior when the collection already exists",
       default: "update",
-      type: "TEXT"
-    },
-    {
-      kind: "option",
+      choices: ["update", "fail"]
+    }),
+    createOptionParameter({
       name: "--if-missing",
-      names: ["--if-missing"],
-      required: false,
-      takes_value: true,
-      is_flag: false,
-      nargs: 1,
+      type: "TEXT",
+      help: "Behavior when the collection does not exist",
       default: "create",
-      type: "TEXT"
-    },
-    {
-      kind: "option",
+      choices: ["create", "fail"]
+    }),
+    createOptionParameter({
       name: "--output",
-      names: ["--output"],
-      required: false,
-      takes_value: true,
-      is_flag: false,
-      nargs: 1,
+      type: "TEXT",
+      help: "Successful response detail level",
       default: "full",
-      type: "TEXT"
-    }
+      choices: ["summary", "full"]
+    })
   ];
 }
 
@@ -246,6 +181,9 @@ function createJsonBodyCommand(options: {
   summary: string;
   successMessage: string;
   historyCommand: string;
+  examples?: string[];
+  notes?: string[];
+  inputSchema?: Record<string, unknown>;
   validateBody?: (body: Record<string, unknown>) => Record<string, unknown>;
   run: (
     client: ReturnType<typeof buildRemoteClient>,
@@ -260,7 +198,10 @@ function createJsonBodyCommand(options: {
     authRequired: true,
     destructive: false,
     confirmationRequired: false,
-    parameters: jsonInputParameters(),
+    examples: options.examples,
+    notes: options.notes,
+    inputSchema: options.inputSchema ?? createObjectInputSchema(),
+    parameters: createJsonInputParameters(),
     build: () =>
       new Command(options.name)
         .description(options.summary)
@@ -304,6 +245,10 @@ function createCollectionsListDefinition(context: AppContext): CommandDefinition
     authRequired: true,
     destructive: false,
     confirmationRequired: false,
+    examples: [
+      "pocketbase-cli --json collections list",
+      "pocketbase-cli --json collections list --all"
+    ],
     parameters: listParameters(),
     build: () =>
       new Command("list")
@@ -360,14 +305,12 @@ function createCollectionsGetDefinition(context: AppContext): CommandDefinition 
     authRequired: true,
     destructive: false,
     confirmationRequired: false,
+    examples: ["pocketbase-cli --json collections get users"],
     parameters: [
-      {
-        kind: "argument",
+      createArgumentParameter({
         name: "name_or_id",
-        required: true,
-        nargs: 1,
-        type: "TEXT"
-      }
+        help: "Collection name or collection id"
+      })
     ],
     build: () =>
       new Command("get")
@@ -393,15 +336,20 @@ function createCollectionsUpdateDefinition(context: AppContext): CommandDefiniti
     authRequired: true,
     destructive: false,
     confirmationRequired: false,
+    examples: [
+      "printf '{\"name\":\"users\",\"indexes\":[]}\\n' | pocketbase-cli --json collections update users --stdin-json"
+    ],
+    notes: ["The input body should be a full or partial PocketBase collection definition."],
+    inputSchema: createObjectInputSchema({
+      description: "PocketBase collection definition payload.",
+      additionalProperties: true
+    }),
     parameters: [
-      {
-        kind: "argument",
+      createArgumentParameter({
         name: "name_or_id",
-        required: true,
-        nargs: 1,
-        type: "TEXT"
-      },
-      ...jsonInputParameters()
+        help: "Collection name or collection id"
+      }),
+      ...createJsonInputParameters()
     ],
     build: () =>
       new Command("update")
@@ -440,6 +388,25 @@ function createCollectionsEnsureDefinition(context: AppContext): CommandDefiniti
     authRequired: true,
     destructive: false,
     confirmationRequired: false,
+    examples: [
+      "printf '{\"name\":\"users\",\"type\":\"base\"}\\n' | pocketbase-cli --json collections ensure --stdin-json",
+      "pocketbase-cli --json collections ensure --file collection.json --if-exists fail --output summary"
+    ],
+    notes: [
+      "`collections.ensure` requires a non-empty `name` in the JSON body.",
+      "Use `--output summary` when the caller only needs the operation result instead of the full collection payload."
+    ],
+    inputSchema: createObjectInputSchema({
+      description: "PocketBase collection definition used for idempotent ensure.",
+      properties: {
+        name: {
+          type: "string",
+          description: "Collection name used to resolve an existing collection before update."
+        }
+      },
+      required: ["name"],
+      additionalProperties: true
+    }),
     parameters: ensureParameters(),
     build: () =>
       new Command("ensure")
@@ -764,6 +731,18 @@ export function createCollectionsDefinition(context: AppContext): CommandDefinit
         summary: "Create a collection",
         successMessage: "Collection create completed",
         historyCommand: "collections create",
+        examples: [
+          "printf '{\"name\":\"users\",\"type\":\"base\"}\\n' | pocketbase-cli --json collections create --stdin-json"
+        ],
+        inputSchema: createObjectInputSchema({
+          description: "PocketBase collection definition payload.",
+          properties: {
+            name: { type: "string" },
+            type: { type: "string" }
+          },
+          required: ["name"],
+          additionalProperties: true
+        }),
         run: (client, body) => client.collectionsCreate({ body })
       }),
       createCollectionsUpdateDefinition(context),
@@ -777,6 +756,20 @@ export function createCollectionsDefinition(context: AppContext): CommandDefinit
         summary: "Import collections payload",
         successMessage: "Collections import completed",
         historyCommand: "collections import",
+        examples: [
+          "printf '{\"collections\":[{\"name\":\"users\",\"type\":\"base\"}]}\\n' | pocketbase-cli --json collections import --stdin-json"
+        ],
+        inputSchema: createObjectInputSchema({
+          description: "Collections import payload.",
+          properties: {
+            collections: {
+              type: "array",
+              description: "Non-empty array of PocketBase collection definitions."
+            }
+          },
+          required: ["collections"],
+          additionalProperties: true
+        }),
         validateBody: parseCollectionsImportPayload,
         run: (client, body) => client.collectionsImport({ body })
       }),
@@ -788,6 +781,7 @@ export function createCollectionsDefinition(context: AppContext): CommandDefinit
         authRequired: true,
         destructive: false,
         confirmationRequired: false,
+        examples: ["pocketbase-cli --json collections scaffolds"],
         build: () =>
           new Command("scaffolds")
             .description("Fetch collection scaffolds metadata")

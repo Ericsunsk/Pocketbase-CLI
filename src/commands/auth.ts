@@ -9,6 +9,7 @@ import {
   saveContextState
 } from "../app/context";
 import type { CommandDefinition } from "../contract/command-registry";
+import { createArgumentParameter, createOptionParameter } from "../contract/metadata";
 import { emitError, emitSuccess } from "../core/output";
 import { PocketBaseRemoteClient, PocketBaseRemoteError } from "../http/remote-client";
 import { readSecretFromStdin } from "../input/json-input";
@@ -54,51 +55,37 @@ function createAuthLoginDefinition(context: AppContext): CommandDefinition {
     examples: [
       "printf 'Secret123\\n' | pocketbase-cli --json auth login --password-stdin admin@example.com"
     ],
+    notes: [
+      "Use `--password-stdin` for automation-safe secret handling instead of passing the password on argv."
+    ],
     parameters: [
-      {
-        kind: "option",
+      createOptionParameter({
         name: "--base-url",
-        names: ["--base-url"],
-        required: false,
-        takes_value: true,
-        is_flag: false,
-        nargs: 1,
-        type: "TEXT"
-      },
-      {
-        kind: "option",
+        type: "TEXT",
+        help: "PocketBase base URL, for example `https://pb.example.com`"
+      }),
+      createOptionParameter({
         name: "--collection",
-        names: ["--collection"],
-        required: false,
-        takes_value: true,
-        is_flag: false,
-        nargs: 1,
-        type: "TEXT"
-      },
-      {
-        kind: "option",
+        type: "TEXT",
+        help: "Auth collection name, defaults to `config auth_collection` or `_superusers`"
+      }),
+      createOptionParameter({
         name: "--password-stdin",
-        names: ["--password-stdin"],
-        required: false,
-        takes_value: false,
-        is_flag: true,
-        nargs: 1,
-        type: "BOOLEAN"
-      },
-      {
-        kind: "argument",
+        type: "BOOLEAN",
+        help: "Read the password from stdin instead of argv",
+        isFlag: true
+      }),
+      createArgumentParameter({
         name: "identity",
-        required: false,
-        nargs: 1,
-        type: "TEXT"
-      },
-      {
-        kind: "argument",
+        help: "Identity value such as an email address or username",
+        required: false
+      }),
+      createArgumentParameter({
         name: "password",
+        help: "Password value when not using `--password-stdin`",
         required: false,
-        nargs: 1,
-        type: "TEXT"
-      }
+        sensitive: true
+      })
     ],
     build: () =>
       new Command("login")
@@ -240,16 +227,12 @@ function createAuthLogoutDefinition(context: AppContext): CommandDefinition {
     destructive: false,
     confirmationRequired: false,
     parameters: [
-      {
-        kind: "option",
+      createOptionParameter({
         name: "--yes",
-        names: ["--yes"],
-        required: false,
-        takes_value: false,
-        is_flag: true,
-        nargs: 1,
-        type: "BOOLEAN"
-      }
+        type: "BOOLEAN",
+        help: "Skip interactive logout confirmation",
+        isFlag: true
+      })
     ],
     build: () =>
       new Command("logout")
@@ -302,6 +285,7 @@ function createAuthStatusDefinition(context: AppContext): CommandDefinition {
     authRequired: false,
     destructive: false,
     confirmationRequired: false,
+    examples: ["pocketbase-cli --json auth status"],
     build: () =>
       new Command("status")
         .description("Show remote auth status")
@@ -326,6 +310,7 @@ function createAuthWhoamiDefinition(context: AppContext): CommandDefinition {
     authRequired: false,
     destructive: false,
     confirmationRequired: false,
+    examples: ["pocketbase-cli --json auth whoami"],
     build: () =>
       new Command("whoami")
         .description("Show current remote auth identity")
@@ -350,6 +335,7 @@ function createAuthRefreshDefinition(context: AppContext): CommandDefinition {
     authRequired: true,
     destructive: false,
     confirmationRequired: false,
+    examples: ["pocketbase-cli --json auth refresh"],
     build: () =>
       new Command("refresh")
         .description("Refresh current remote auth token")

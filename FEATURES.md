@@ -10,6 +10,7 @@ Project path: `<repo-root>`
 - Default interactive REPL when no subcommand is provided
 - Machine-readable `--json` output mode
 - Machine-readable `schema --json` command contract for tools and LLMs
+- Read-only `preflight` command for readiness checks before the next remote call
 - One-shot command coverage for remote admin operations:
   - auth and session management
   - settings, logs, crons, collections, records, batch, files, and backups
@@ -40,8 +41,11 @@ All operational commands use PocketBase's HTTP API against a remote deployment. 
 - The CLI attempts to restrict the session file permissions to `0600`.
 - Supported persisted config keys are `base_url`, `auth_collection`, and `timeout`.
 - JSON output now exposes a stable envelope with `meta`, `result`, structured `error`, `http`, and `pagination`.
+- In JSON output, `result` is the decoded business payload while `data` preserves the raw transport wrapper when a command proxies a remote HTTP response.
+- The schema contract now includes parameter help, enum choices, mutual exclusions, examples, and per-command `input_schema` where available.
 - `files url` is a helper that builds PocketBase file URLs and can optionally fetch a temporary file token via `/api/files/token`.
 - `raw` stays anonymous unless `--with-auth` is passed explicitly.
+- `preflight` reports whether `base_url`, auth state, and `/api/health` are ready for the next command without mutating session state.
 - `logs stats` wraps `/api/logs/stats` for quick operational summaries without falling back to `raw`.
 - `crons` wraps `/api/crons` list/run operations.
 - `collections` now covers the documented remote collection management routes instead of only list/get.

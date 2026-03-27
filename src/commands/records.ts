@@ -2,6 +2,12 @@ import { Command } from "commander";
 
 import { AppContext, recordCommand } from "../app/context";
 import type { CommandDefinition, CommandParameter } from "../contract/command-registry";
+import {
+  createArgumentParameter,
+  createJsonInputParameters,
+  createObjectInputSchema,
+  createOptionParameter
+} from "../contract/metadata";
 import { emitError, emitSuccess } from "../core/output";
 import type { RemoteResult } from "../http/remote-client";
 import { loadOptionalJsonObjectInput } from "../input/json-input";
@@ -25,14 +31,112 @@ function parseNumber(value: string | undefined): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
+const ARGUMENT_METADATA: Record<string, { help: string; sensitive?: boolean }> = {
+  collection: {
+    help: "PocketBase collection name"
+  },
+  record_id: {
+    help: "PocketBase record id"
+  },
+  identity: {
+    help: "Identity value such as an email address or username"
+  },
+  password: {
+    help: "Password or OTP password value",
+    sensitive: true
+  },
+  email: {
+    help: "Email address"
+  },
+  otp_id: {
+    help: "OTP id returned by `records request-otp`"
+  },
+  token: {
+    help: "Confirmation token received from PocketBase",
+    sensitive: true
+  },
+  password_confirm: {
+    help: "Password confirmation value",
+    sensitive: true
+  },
+  new_email: {
+    help: "New email address to request or confirm"
+  }
+};
+
+const OPTION_METADATA: Record<
+  string,
+  {
+    help: string;
+    sensitive?: boolean;
+  }
+> = {
+  "--page": {
+    help: "Page number for paginated responses"
+  },
+  "--per-page": {
+    help: "Items per page"
+  },
+  "--filter": {
+    help: "PocketBase filter expression"
+  },
+  "--sort": {
+    help: "PocketBase sort expression"
+  },
+  "--fields": {
+    help: "Comma-separated field projection"
+  },
+  "--expand": {
+    help: "Comma-separated relation expansion list"
+  },
+  "--all": {
+    help: "Fetch every page and merge the result into one payload"
+  },
+  "--first": {
+    help: "Only use the first matching record"
+  },
+  "--identity-field": {
+    help: "Explicit identity field name"
+  },
+  "--mfa-id": {
+    help: "Existing MFA flow id to continue"
+  },
+  "--provider": {
+    help: "OAuth2 provider name"
+  },
+  "--code": {
+    help: "OAuth2 authorization code",
+    sensitive: true
+  },
+  "--redirect-url": {
+    help: "OAuth2 redirect URL used during authorization"
+  },
+  "--code-verifier": {
+    help: "PKCE code verifier",
+    sensitive: true
+  },
+  "--create-data": {
+    help: "Inline JSON object for first-time OAuth2 record creation"
+  },
+  "--create-file": {
+    help: "Path to a JSON file for first-time OAuth2 record creation"
+  },
+  "--no-save": {
+    help: "Do not persist the returned auth token"
+  },
+  "--duration": {
+    help: "Requested token duration in seconds"
+  }
+};
+
 function argumentParameter(name: string): CommandParameter {
-  return {
-    kind: "argument",
+  const metadata = ARGUMENT_METADATA[name];
+
+  return createArgumentParameter({
     name,
-    required: true,
-    nargs: 1,
-    type: "TEXT"
-  };
+    help: metadata?.help,
+    sensitive: metadata?.sensitive
+  });
 }
 
 function optionParameter(options: {
@@ -41,228 +145,61 @@ function optionParameter(options: {
   required?: boolean;
   isFlag?: boolean;
   multiple?: boolean;
+  help?: string;
+  choices?: string[];
+  conflictsWith?: string[];
+  sensitive?: boolean;
 }): CommandParameter {
-  return {
-    kind: "option",
-    name: options.name,
-    names: [options.name],
-    required: options.required ?? false,
-    takes_value: !(options.isFlag ?? false),
-    is_flag: options.isFlag ?? false,
-    multiple: options.multiple ?? false,
-    nargs: 1,
-    type: options.type
-  };
+  const metadata = OPTION_METADATA[options.name];
+
+  return createOptionParameter({
+    ...options,
+    help: options.help ?? metadata?.help,
+    choices: options.choices,
+    conflictsWith: options.conflictsWith,
+    sensitive: options.sensitive ?? metadata?.sensitive
+  });
 }
 
 function listOptionsParameters(): CommandParameter[] {
   return [
-    {
-      kind: "option",
-      name: "--page",
-      names: ["--page"],
-      required: false,
-      takes_value: true,
-      is_flag: false,
-      nargs: 1,
-      type: "INTEGER"
-    },
-    {
-      kind: "option",
-      name: "--per-page",
-      names: ["--per-page"],
-      required: false,
-      takes_value: true,
-      is_flag: false,
-      nargs: 1,
-      type: "INTEGER"
-    },
-    {
-      kind: "option",
-      name: "--filter",
-      names: ["--filter"],
-      required: false,
-      takes_value: true,
-      is_flag: false,
-      nargs: 1,
-      type: "TEXT"
-    },
-    {
-      kind: "option",
-      name: "--sort",
-      names: ["--sort"],
-      required: false,
-      takes_value: true,
-      is_flag: false,
-      nargs: 1,
-      type: "TEXT"
-    },
-    {
-      kind: "option",
-      name: "--fields",
-      names: ["--fields"],
-      required: false,
-      takes_value: true,
-      is_flag: false,
-      nargs: 1,
-      type: "TEXT"
-    },
-    {
-      kind: "option",
-      name: "--expand",
-      names: ["--expand"],
-      required: false,
-      takes_value: true,
-      is_flag: false,
-      nargs: 1,
-      type: "TEXT"
-    },
-    {
-      kind: "option",
-      name: "--all",
-      names: ["--all"],
-      required: false,
-      takes_value: false,
-      is_flag: true,
-      nargs: 1,
-      type: "BOOLEAN"
-    }
+    optionParameter({ name: "--page", type: "INTEGER" }),
+    optionParameter({ name: "--per-page", type: "INTEGER" }),
+    optionParameter({ name: "--filter", type: "TEXT" }),
+    optionParameter({ name: "--sort", type: "TEXT" }),
+    optionParameter({ name: "--fields", type: "TEXT" }),
+    optionParameter({ name: "--expand", type: "TEXT" }),
+    optionParameter({ name: "--all", type: "BOOLEAN", isFlag: true })
   ];
 }
 
 function getOptionsParameters(): CommandParameter[] {
   return [
-    {
-      kind: "option",
-      name: "--fields",
-      names: ["--fields"],
-      required: false,
-      takes_value: true,
-      is_flag: false,
-      nargs: 1,
-      type: "TEXT"
-    },
-    {
-      kind: "option",
-      name: "--expand",
-      names: ["--expand"],
-      required: false,
-      takes_value: true,
-      is_flag: false,
-      nargs: 1,
-      type: "TEXT"
-    }
+    optionParameter({ name: "--fields", type: "TEXT" }),
+    optionParameter({ name: "--expand", type: "TEXT" })
   ];
 }
 
 function findOptionsParameters(): CommandParameter[] {
   return [
-    {
-      kind: "option",
-      name: "--filter",
-      names: ["--filter"],
-      required: true,
-      takes_value: true,
-      is_flag: false,
-      nargs: 1,
-      type: "TEXT"
-    },
-    {
-      kind: "option",
-      name: "--first",
-      names: ["--first"],
-      required: false,
-      takes_value: false,
-      is_flag: true,
-      nargs: 1,
-      type: "BOOLEAN"
-    },
-    {
-      kind: "option",
-      name: "--per-page",
-      names: ["--per-page"],
-      required: false,
-      takes_value: true,
-      is_flag: false,
-      nargs: 1,
-      type: "INTEGER"
-    },
-    {
-      kind: "option",
-      name: "--sort",
-      names: ["--sort"],
-      required: false,
-      takes_value: true,
-      is_flag: false,
-      nargs: 1,
-      type: "TEXT"
-    },
-    {
-      kind: "option",
-      name: "--fields",
-      names: ["--fields"],
-      required: false,
-      takes_value: true,
-      is_flag: false,
-      nargs: 1,
-      type: "TEXT"
-    },
-    {
-      kind: "option",
-      name: "--expand",
-      names: ["--expand"],
-      required: false,
-      takes_value: true,
-      is_flag: false,
-      nargs: 1,
-      type: "TEXT"
-    }
+    optionParameter({ name: "--filter", type: "TEXT", required: true }),
+    optionParameter({ name: "--first", type: "BOOLEAN", isFlag: true }),
+    optionParameter({ name: "--per-page", type: "INTEGER" }),
+    optionParameter({ name: "--sort", type: "TEXT" }),
+    optionParameter({ name: "--fields", type: "TEXT" }),
+    optionParameter({ name: "--expand", type: "TEXT" })
   ];
 }
 
 function mutationOptionsParameters(): CommandParameter[] {
   return [
-    {
-      kind: "option",
-      name: "--data",
-      names: ["--data"],
-      required: false,
-      takes_value: true,
-      is_flag: false,
-      nargs: 1,
-      type: "TEXT"
-    },
-    {
-      kind: "option",
-      name: "--file",
-      names: ["--file"],
-      required: false,
-      takes_value: true,
-      is_flag: false,
-      nargs: 1,
-      type: "TEXT"
-    },
-    {
-      kind: "option",
-      name: "--stdin-json",
-      names: ["--stdin-json"],
-      required: false,
-      takes_value: false,
-      is_flag: true,
-      nargs: 1,
-      type: "BOOLEAN"
-    },
-    {
-      kind: "option",
+    ...createJsonInputParameters(),
+    createOptionParameter({
       name: "--binary-file",
-      names: ["--binary-file"],
-      required: false,
-      takes_value: true,
-      is_flag: false,
-      multiple: true,
-      nargs: 1,
-      type: "TEXT"
-    }
+      type: "TEXT",
+      help: "Repeatable file upload in `<field>=<path>` format",
+      multiple: true
+    })
   ];
 }
 
@@ -407,14 +344,12 @@ function createRecordsListDefinition(context: AppContext): CommandDefinition {
     authRequired: true,
     destructive: false,
     confirmationRequired: false,
+    examples: [
+      "pocketbase-cli --json records list users --all",
+      "pocketbase-cli --json records list users --filter 'verified=true' --fields id,email"
+    ],
     parameters: [
-      {
-        kind: "argument",
-        name: "collection",
-        required: true,
-        nargs: 1,
-        type: "TEXT"
-      },
+      argumentParameter("collection"),
       ...listOptionsParameters()
     ],
     build: () =>
@@ -489,21 +424,10 @@ function createRecordsGetDefinition(context: AppContext): CommandDefinition {
     authRequired: true,
     destructive: false,
     confirmationRequired: false,
+    examples: ["pocketbase-cli --json records get users RECORD_ID --expand profile"],
     parameters: [
-      {
-        kind: "argument",
-        name: "collection",
-        required: true,
-        nargs: 1,
-        type: "TEXT"
-      },
-      {
-        kind: "argument",
-        name: "record_id",
-        required: true,
-        nargs: 1,
-        type: "TEXT"
-      },
+      argumentParameter("collection"),
+      argumentParameter("record_id"),
       ...getOptionsParameters()
     ],
     build: () =>
@@ -545,14 +469,11 @@ function createRecordsFindDefinition(context: AppContext): CommandDefinition {
     authRequired: true,
     destructive: false,
     confirmationRequired: false,
+    examples: [
+      "pocketbase-cli --json records find users --filter 'email = \"demo@example.com\"' --first"
+    ],
     parameters: [
-      {
-        kind: "argument",
-        name: "collection",
-        required: true,
-        nargs: 1,
-        type: "TEXT"
-      },
+      argumentParameter("collection"),
       ...findOptionsParameters()
     ],
     build: () =>
@@ -669,14 +590,20 @@ function createRecordsCreateDefinition(context: AppContext): CommandDefinition {
     authRequired: true,
     destructive: false,
     confirmationRequired: false,
+    examples: [
+      "printf '{\"email\":\"demo@example.com\"}\\n' | pocketbase-cli --json records create users --stdin-json",
+      "pocketbase-cli --json records create users --file payload.json --binary-file avatar=./avatar.png"
+    ],
+    notes: [
+      "Use either JSON input, one or more `--binary-file` values, or both.",
+      "`--binary-file` expects `<field>=<path>` and can be repeated."
+    ],
+    inputSchema: createObjectInputSchema({
+      description: "Record create JSON body. The exact shape depends on the target collection schema.",
+      additionalProperties: true
+    }),
     parameters: [
-      {
-        kind: "argument",
-        name: "collection",
-        required: true,
-        nargs: 1,
-        type: "TEXT"
-      },
+      argumentParameter("collection"),
       ...mutationOptionsParameters()
     ],
     build: () =>
@@ -735,21 +662,19 @@ function createRecordsUpdateDefinition(context: AppContext): CommandDefinition {
     authRequired: true,
     destructive: false,
     confirmationRequired: false,
+    examples: [
+      "printf '{\"name\":\"Updated\"}\\n' | pocketbase-cli --json records update users RECORD_ID --stdin-json"
+    ],
+    notes: [
+      "Use either JSON input, one or more `--binary-file` values, or both."
+    ],
+    inputSchema: createObjectInputSchema({
+      description: "Record update JSON body. The exact shape depends on the target collection schema.",
+      additionalProperties: true
+    }),
     parameters: [
-      {
-        kind: "argument",
-        name: "collection",
-        required: true,
-        nargs: 1,
-        type: "TEXT"
-      },
-      {
-        kind: "argument",
-        name: "record_id",
-        required: true,
-        nargs: 1,
-        type: "TEXT"
-      },
+      argumentParameter("collection"),
+      argumentParameter("record_id"),
       ...mutationOptionsParameters()
     ],
     build: () =>
@@ -814,55 +739,23 @@ function createRecordsUpsertDefinition(context: AppContext): CommandDefinition {
     authRequired: true,
     destructive: false,
     confirmationRequired: false,
+    examples: [
+      "printf '{\"email\":\"demo@example.com\",\"name\":\"Demo\"}\\n' | pocketbase-cli --json records upsert users --filter 'email = \"demo@example.com\"' --stdin-json"
+    ],
+    notes: [
+      "The filter decides whether the request updates an existing record or creates a new one."
+    ],
+    inputSchema: createObjectInputSchema({
+      description: "Record upsert JSON body. The exact shape depends on the target collection schema.",
+      additionalProperties: true
+    }),
     parameters: [
-      {
-        kind: "argument",
-        name: "collection",
-        required: true,
-        nargs: 1,
-        type: "TEXT"
-      },
-      {
-        kind: "option",
-        name: "--filter",
-        names: ["--filter"],
-        required: true,
-        takes_value: true,
-        is_flag: false,
-        nargs: 1,
-        type: "TEXT"
-      },
+      argumentParameter("collection"),
+      optionParameter({ name: "--filter", type: "TEXT", required: true }),
       ...mutationOptionsParameters(),
-      {
-        kind: "option",
-        name: "--first",
-        names: ["--first"],
-        required: false,
-        takes_value: false,
-        is_flag: true,
-        nargs: 1,
-        type: "BOOLEAN"
-      },
-      {
-        kind: "option",
-        name: "--fields",
-        names: ["--fields"],
-        required: false,
-        takes_value: true,
-        is_flag: false,
-        nargs: 1,
-        type: "TEXT"
-      },
-      {
-        kind: "option",
-        name: "--expand",
-        names: ["--expand"],
-        required: false,
-        takes_value: true,
-        is_flag: false,
-        nargs: 1,
-        type: "TEXT"
-      }
+      optionParameter({ name: "--first", type: "BOOLEAN", isFlag: true }),
+      optionParameter({ name: "--fields", type: "TEXT" }),
+      optionParameter({ name: "--expand", type: "TEXT" })
     ],
     build: () =>
       new Command("upsert")
@@ -1357,6 +1250,10 @@ function createRecordsAuthPasswordDefinition(context: AppContext): CommandDefini
     authRequired: false,
     destructive: false,
     confirmationRequired: false,
+    examples: [
+      "pocketbase-cli --json records auth-password users demo@example.com Secret123 --fields id,email"
+    ],
+    notes: ["Use `--no-save` when the returned token should not overwrite the saved auth session."],
     parameters: [
       argumentParameter("collection"),
       argumentParameter("identity"),
@@ -1455,14 +1352,28 @@ function createRecordsAuthOauth2Definition(context: AppContext): CommandDefiniti
     authRequired: false,
     destructive: false,
     confirmationRequired: false,
+    examples: [
+      "pocketbase-cli --json records auth-oauth2 users --provider google --code AUTH_CODE --redirect-url https://app.example.com/callback"
+    ],
+    notes: [
+      "Use either `--create-data` or `--create-file` to provide first-time record creation payload."
+    ],
     parameters: [
       argumentParameter("collection"),
       optionParameter({ name: "--provider", type: "TEXT", required: true }),
       optionParameter({ name: "--code", type: "TEXT", required: true }),
       optionParameter({ name: "--redirect-url", type: "TEXT", required: true }),
       optionParameter({ name: "--code-verifier", type: "TEXT" }),
-      optionParameter({ name: "--create-data", type: "TEXT" }),
-      optionParameter({ name: "--create-file", type: "TEXT" }),
+      optionParameter({
+        name: "--create-data",
+        type: "TEXT",
+        conflictsWith: ["--create-file"]
+      }),
+      optionParameter({
+        name: "--create-file",
+        type: "TEXT",
+        conflictsWith: ["--create-data"]
+      }),
       optionParameter({ name: "--fields", type: "TEXT" }),
       optionParameter({ name: "--expand", type: "TEXT" }),
       optionParameter({ name: "--no-save", type: "BOOLEAN", isFlag: true })
@@ -1589,6 +1500,7 @@ function createRecordsAuthRefreshDefinition(context: AppContext): CommandDefinit
     authRequired: true,
     destructive: false,
     confirmationRequired: false,
+    examples: ["pocketbase-cli --json records auth-refresh users --fields id,email"],
     parameters: [
       argumentParameter("collection"),
       optionParameter({ name: "--fields", type: "TEXT" }),
@@ -2004,6 +1916,9 @@ function createRecordsImpersonateDefinition(context: AppContext): CommandDefinit
     authRequired: true,
     destructive: false,
     confirmationRequired: false,
+    examples: [
+      "pocketbase-cli --json records impersonate users RECORD_ID --duration 300"
+    ],
     parameters: [
       argumentParameter("collection"),
       argumentParameter("record_id"),

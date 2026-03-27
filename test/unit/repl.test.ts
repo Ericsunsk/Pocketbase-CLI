@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { AppContext } from "../../src/app/context";
 import { PocketBaseRepl, ReplEofError, sanitizeHistoryTokens } from "../../src/core/repl";
-import { CliExitError } from "../../src/core/output";
+import { CliExitError, SCHEMA_VERSION } from "../../src/core/output";
 import { SessionState, SessionStore } from "../../src/core/session-store";
 
 function createContext(): AppContext {
@@ -119,7 +119,8 @@ describe("PocketBaseRepl", () => {
 
     expect(payloads[0]).toMatchObject({
       ok: true,
-      action: "repl.start"
+      action: "repl.start",
+      schema_version: SCHEMA_VERSION
     });
     expect(payloads.some((payload) => payload.action === "config.set")).toBe(true);
     expect(payloads.some((payload) => payload.action === "history")).toBe(true);
@@ -132,6 +133,13 @@ describe("PocketBaseRepl", () => {
     const historyPayload = payloads.find((payload) => payload.action === "history");
     expect(historyPayload).toBeDefined();
     expect(historyPayload?.data).toMatchObject({
+      items: [
+        "config set base_url https://pb.example.com",
+        "auth login admin@example.com ********",
+        "history"
+      ]
+    });
+    expect(historyPayload?.result).toMatchObject({
       items: [
         "config set base_url https://pb.example.com",
         "auth login admin@example.com ********",

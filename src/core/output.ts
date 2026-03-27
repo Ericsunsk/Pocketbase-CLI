@@ -1,6 +1,6 @@
 import { Writable } from "node:stream";
 
-export const SCHEMA_VERSION = "pocketbase-cli/v1";
+export const SCHEMA_VERSION = "pocketbase-cli/v2";
 
 type WriteTarget = Pick<Writable, "write">;
 
@@ -220,7 +220,7 @@ export function buildSuccessEnvelope(options: {
 
   if (options.data !== undefined) {
     payload.data = options.data;
-    payload.result = options.data;
+    payload.result = resultPayload;
   }
   if (http) {
     payload.http = http;

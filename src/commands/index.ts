@@ -11,6 +11,7 @@ import { createFilesDefinition } from "./files";
 import { createHistoryCommandDefinitions } from "./history";
 import { createInfoDefinition } from "./info";
 import { createLogsDefinition } from "./logs";
+import { createPreflightDefinition } from "./preflight";
 import { createRawDefinition } from "./raw";
 import { createRecordsDefinition } from "./records";
 import { createReplDefinition } from "./repl";
@@ -46,6 +47,7 @@ export function buildCommandDefinitions(
   const definitions: CommandDefinition[] = [
     createReplDefinition(context, runRepl),
     createInfoDefinition(context),
+    createPreflightDefinition(context),
     createRawDefinition(context),
     createConfigDefinition(context),
     createAuthDefinition(context),

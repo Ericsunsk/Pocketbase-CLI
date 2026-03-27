@@ -7,10 +7,15 @@
 - `schema --json` and `schema <command> --json` discoverability
 - `schema collections ensure --json` exposes ensure policy options
 - `schema collections ensure --json` exposes ensure output options
+- `schema raw --json` exposes parameter help, conflicts, examples, and `input_schema`
 - JSON output shape for `info`
 - JSON error envelope shape with `meta` and structured `error`
+- JSON success envelope keeps decoded business payload in `result`
 - JSON output shape for `history`
 - JSON REPL stream remains parseable without prompt pollution
+- JSON REPL built-ins reuse the same envelope shape as one-shot CLI commands
+- `preflight --require-auth --skip-health` reports missing prerequisites without mutating state
+- `preflight --require-auth --skip-health` passes when config and saved auth match
 - REPL history redacts explicit `files url --token` and `backups download --token` values
 - `raw GET /api/health` stays anonymous by default
 - `raw GET /api/health --with-auth` attaches the saved auth token explicitly

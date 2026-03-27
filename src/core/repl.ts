@@ -3,7 +3,7 @@ import type { Interface as ReadLineInterface } from "node:readline/promises";
 import type { Writable } from "node:stream";
 
 import { AppContext, clearRemoteAuthIfConfigTargetChanged, saveContextState } from "../app/context";
-import { CliExitError } from "./output";
+import { CliExitError, buildErrorEnvelope, buildSuccessEnvelope } from "./output";
 import { isConfigKey, parseConfigValue } from "../input/validators";
 
 type WriteTarget = Pick<Writable, "write">;
@@ -25,6 +25,7 @@ const BUILTIN_HELP_LINES = [
 
 const REMOTE_HELP_EXAMPLES = [
   "  info",
+  "  preflight --require-auth",
   "  config set base_url https://pb.example.com",
   "  auth login admin@example.com Secret123",
   "  auth status",
@@ -319,10 +320,10 @@ export class PocketBaseRepl {
             continue;
           }
 
-          this.emit({
-            ok: false,
-            action: "repl.dispatch",
-            message: error instanceof Error ? error.message : String(error)
+        this.emit({
+          ok: false,
+          action: "repl.dispatch",
+          message: error instanceof Error ? error.message : String(error)
           });
         }
 
@@ -371,7 +372,8 @@ export class PocketBaseRepl {
       this.emit({
         ok: false,
         action: "repl.parse",
-        message: "Unable to parse REPL input."
+        message: "Unable to parse REPL input.",
+        errorType: "invalid_input"
       });
       return null;
     }
@@ -456,7 +458,8 @@ export class PocketBaseRepl {
         this.emit({
           ok: false,
           action: "config.set",
-          message: "Usage: config set <key> <value>"
+          message: "Usage: config set <key> <value>",
+          errorType: "usage_error"
         });
         return;
       }
@@ -499,7 +502,8 @@ export class PocketBaseRepl {
         this.emit({
           ok: false,
           action: "config.unset",
-          message: "Usage: config unset <key>"
+          message: "Usage: config unset <key>",
+          errorType: "usage_error"
         });
         return;
       }
@@ -537,7 +541,8 @@ export class PocketBaseRepl {
     this.emit({
       ok: false,
       action: "config",
-      message: "Unknown config command"
+      message: "Unknown config command",
+      errorType: "invalid_input"
     });
   }
 
@@ -546,19 +551,30 @@ export class PocketBaseRepl {
     action: string;
     message: string;
     data?: unknown;
+    code?: number;
+    errorType?: string;
+    hint?: string;
+    missingPrerequisite?: string;
   }): void {
     if (this.jsonOutput) {
-      const payload: Record<string, unknown> = {
-        ok: options.ok,
-        action: options.action,
-        message: options.message
-      };
+      const target = options.ok ? this.stdout : this.stderr;
+      const payload = options.ok
+        ? buildSuccessEnvelope({
+            action: options.action,
+            message: options.message,
+            data: options.data
+          })
+        : buildErrorEnvelope({
+            action: options.action,
+            message: options.message,
+            code: options.code,
+            data: options.data,
+            errorType: options.errorType,
+            hint: options.hint,
+            missingPrerequisite: options.missingPrerequisite
+          });
 
-      if (options.data !== undefined) {
-        payload.data = options.data;
-      }
-
-      writeLine(this.stdout, JSON.stringify(payload));
+      writeLine(target, JSON.stringify(payload));
       return;
     }
 

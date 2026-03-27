@@ -2,6 +2,12 @@ import { Command } from "commander";
 
 import { AppContext, recordCommand } from "../app/context";
 import type { CommandDefinition } from "../contract/command-registry";
+import {
+  createArgumentParameter,
+  createJsonInputParameters,
+  createObjectInputSchema,
+  createOptionParameter
+} from "../contract/metadata";
 import { emitError, emitSuccess } from "../core/output";
 import { PocketBaseRemoteError } from "../http/remote-client";
 import { loadOptionalJsonObjectInput } from "../input/json-input";
@@ -37,61 +43,36 @@ export function createRawDefinition(context: AppContext): CommandDefinition {
     authRequired: "conditional",
     destructive: false,
     confirmationRequired: false,
+    examples: [
+      "pocketbase-cli --json raw GET /api/health",
+      "printf '{\"name\":\"demo\"}\\n' | pocketbase-cli --json raw POST /api/collections/tags/records --stdin-json --with-auth"
+    ],
+    notes: [
+      "`raw` is anonymous by default; pass `--with-auth` to attach the saved token explicitly.",
+      "The response `result` field contains the decoded response body, while `data` keeps the transport wrapper."
+    ],
+    inputSchema: createObjectInputSchema({
+      description:
+        "Optional JSON request body used with methods such as POST, PUT, or PATCH.",
+      additionalProperties: true,
+      examples: [{ name: "demo" }]
+    }),
     parameters: [
-      {
-        kind: "argument",
+      createArgumentParameter({
         name: "method",
-        required: true,
-        nargs: 1,
-        type: "TEXT"
-      },
-      {
-        kind: "argument",
+        help: "HTTP method such as GET, POST, PATCH, PUT, or DELETE"
+      }),
+      createArgumentParameter({
         name: "path",
-        required: true,
-        nargs: 1,
-        type: "TEXT"
-      },
-      {
-        kind: "option",
-        name: "--data",
-        names: ["--data"],
-        required: false,
-        takes_value: true,
-        is_flag: false,
-        nargs: 1,
-        type: "TEXT"
-      },
-      {
-        kind: "option",
-        name: "--file",
-        names: ["--file"],
-        required: false,
-        takes_value: true,
-        is_flag: false,
-        nargs: 1,
-        type: "TEXT"
-      },
-      {
-        kind: "option",
-        name: "--stdin-json",
-        names: ["--stdin-json"],
-        required: false,
-        takes_value: false,
-        is_flag: true,
-        nargs: 1,
-        type: "BOOLEAN"
-      },
-      {
-        kind: "option",
+        help: "PocketBase API path beginning with `/`, for example `/api/health`"
+      }),
+      ...createJsonInputParameters(),
+      createOptionParameter({
         name: "--with-auth",
-        names: ["--with-auth"],
-        required: false,
-        takes_value: false,
-        is_flag: true,
-        nargs: 1,
-        type: "BOOLEAN"
-      }
+        type: "BOOLEAN",
+        help: "Attach the saved remote auth token to the request",
+        isFlag: true
+      })
     ],
     build: () =>
       new Command("raw")

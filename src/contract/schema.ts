@@ -1,7 +1,7 @@
 import type { CommandDefinition, CommandParameter } from "./command-registry";
 import { flattenCommandDefinitions, normalizeSchemaPath } from "./command-registry";
 
-export const CONTRACT_SCHEMA_VERSION = "1.0.0";
+export const CONTRACT_SCHEMA_VERSION = "1.1.0";
 
 export interface SchemaEntry {
   name: string;
@@ -15,6 +15,8 @@ export interface SchemaEntry {
   confirmation_required: boolean;
   confirmation_flag: string | null;
   examples: string[];
+  notes: string[];
+  input_schema: Record<string, unknown> | null;
   parameters: unknown[];
   arguments: unknown[];
   options: unknown[];
@@ -65,6 +67,8 @@ function formatDefinitionEntry(definition: CommandDefinition, includeHidden: boo
     confirmation_required: definition.confirmationRequired,
     confirmation_flag: definition.confirmationFlag ?? null,
     examples: [...(definition.examples ?? [])],
+    notes: [...(definition.notes ?? [])],
+    input_schema: definition.inputSchema ?? null,
     parameters,
     arguments: argumentsList,
     options: optionsList,
@@ -101,6 +105,11 @@ export function buildSchemaContract(
     confirmation_required: false,
     confirmation_flag: null,
     examples: ["pocketbase-cli --json info", "pocketbase-cli schema --json"],
+    notes: [
+      "Use `schema --json` for machine-readable command discovery.",
+      "Command entries can include parameter help, enums, input_schema, and examples."
+    ],
+    input_schema: null,
     parameters: [],
     arguments: [],
     options: [],

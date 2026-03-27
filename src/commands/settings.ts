@@ -1,7 +1,8 @@
 import { Command } from "commander";
 
 import { AppContext, recordCommand } from "../app/context";
-import type { CommandDefinition, CommandParameter } from "../contract/command-registry";
+import type { CommandDefinition } from "../contract/command-registry";
+import { createJsonInputParameters, createObjectInputSchema } from "../contract/metadata";
 import { emitError } from "../core/output";
 import type { RemoteResult } from "../http/remote-client";
 import { loadJsonObjectInput } from "../input/json-input";
@@ -12,41 +13,6 @@ type JsonInputOptions = {
   file?: string;
   stdinJson?: boolean;
 };
-
-function jsonInputParameters(): CommandParameter[] {
-  return [
-    {
-      kind: "option",
-      name: "--data",
-      names: ["--data"],
-      required: false,
-      takes_value: true,
-      is_flag: false,
-      nargs: 1,
-      type: "TEXT"
-    },
-    {
-      kind: "option",
-      name: "--file",
-      names: ["--file"],
-      required: false,
-      takes_value: true,
-      is_flag: false,
-      nargs: 1,
-      type: "TEXT"
-    },
-    {
-      kind: "option",
-      name: "--stdin-json",
-      names: ["--stdin-json"],
-      required: false,
-      takes_value: false,
-      is_flag: true,
-      nargs: 1,
-      type: "BOOLEAN"
-    }
-  ];
-}
 
 async function buildBody(
   options: JsonInputOptions,
@@ -115,7 +81,10 @@ function createJsonBodyCommand(options: {
   path: string;
   summary: string;
   successMessage: string;
-    validateBody?: (body: Record<string, unknown>) => Record<string, unknown>;
+  examples?: string[];
+  notes?: string[];
+  inputSchema?: Record<string, unknown>;
+  validateBody?: (body: Record<string, unknown>) => Record<string, unknown>;
   run: (
     client: {
       settingsPatch: (payload: { body: Record<string, unknown> }) => Promise<RemoteResult<unknown>>;
@@ -134,7 +103,10 @@ function createJsonBodyCommand(options: {
     authRequired: true,
     destructive: false,
     confirmationRequired: false,
-    parameters: jsonInputParameters(),
+    examples: options.examples,
+    notes: options.notes,
+    inputSchema: options.inputSchema ?? createObjectInputSchema(),
+    parameters: createJsonInputParameters(),
     build: () =>
       new Command(options.name)
         .description(options.summary)
@@ -174,6 +146,7 @@ function createSettingsGetDefinition(context: AppContext): CommandDefinition {
     authRequired: true,
     destructive: false,
     confirmationRequired: false,
+    examples: ["pocketbase-cli --json settings get"],
     build: () =>
       new Command("get")
         .description("Fetch remote settings")
@@ -205,6 +178,14 @@ export function createSettingsDefinition(context: AppContext): CommandDefinition
         path: "settings.patch",
         summary: "Patch remote settings",
         successMessage: "Settings patch completed",
+        examples: [
+          "printf '{\"meta\":{\"appName\":\"PocketBase\"}}\\n' | pocketbase-cli --json settings patch --stdin-json"
+        ],
+        notes: ["The request body is forwarded to PocketBase settings patch as-is."],
+        inputSchema: createObjectInputSchema({
+          description: "Partial PocketBase settings object.",
+          additionalProperties: true
+        }),
         run: (client, body) => client.settingsPatch({ body })
       }),
       createJsonBodyCommand({
@@ -213,6 +194,21 @@ export function createSettingsDefinition(context: AppContext): CommandDefinition
         path: "settings.test-s3",
         summary: "Test remote S3 settings",
         successMessage: "Settings S3 test completed",
+        examples: [
+          "printf '{\"filesystem\":\"storage\"}\\n' | pocketbase-cli --json settings test-s3 --stdin-json"
+        ],
+        inputSchema: createObjectInputSchema({
+          description: "S3 test payload.",
+          properties: {
+            filesystem: {
+              type: "string",
+              enum: ["storage", "backups"],
+              description: "Which PocketBase filesystem to test."
+            }
+          },
+          required: ["filesystem"],
+          additionalProperties: true
+        }),
         validateBody: validateS3TestBody,
         run: (client, body) => client.settingsTestS3({ body })
       }),
@@ -222,6 +218,24 @@ export function createSettingsDefinition(context: AppContext): CommandDefinition
         path: "settings.test-email",
         summary: "Test remote email settings",
         successMessage: "Settings email test completed",
+        examples: [
+          "printf '{\"email\":\"ops@example.com\",\"template\":\"verification\"}\\n' | pocketbase-cli --json settings test-email --stdin-json"
+        ],
+        inputSchema: createObjectInputSchema({
+          description: "Email test payload.",
+          properties: {
+            email: {
+              type: "string",
+              description: "Recipient email address used for the test send."
+            },
+            template: {
+              type: "string",
+              description: "PocketBase email template name to render."
+            }
+          },
+          required: ["email", "template"],
+          additionalProperties: true
+        }),
         validateBody: validateEmailTestBody,
         run: (client, body) => client.settingsTestEmail({ body })
       }),
@@ -231,6 +245,21 @@ export function createSettingsDefinition(context: AppContext): CommandDefinition
         path: "settings.apple-client-secret",
         summary: "Generate Apple client secret",
         successMessage: "Apple client secret generated",
+        examples: [
+          "printf '{\"clientId\":\"app.example\",\"teamId\":\"TEAM123\",\"keyId\":\"KEY123\",\"privateKey\":\"-----BEGIN PRIVATE KEY-----...\",\"duration\":300}\\n' | pocketbase-cli --json settings apple-client-secret --stdin-json"
+        ],
+        inputSchema: createObjectInputSchema({
+          description: "Apple client secret generation payload.",
+          properties: {
+            clientId: { type: "string" },
+            teamId: { type: "string" },
+            keyId: { type: "string" },
+            privateKey: { type: "string" },
+            duration: { type: "integer" }
+          },
+          required: ["clientId", "teamId", "keyId", "privateKey", "duration"],
+          additionalProperties: true
+        }),
         validateBody: validateAppleSecretBody,
         run: (client, body) => client.settingsGenerateAppleClientSecret({ body })
       })

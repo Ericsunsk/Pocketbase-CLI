@@ -27,6 +27,25 @@ describe("output envelope", () => {
 
     expect(payload.ok).toBe(true);
     expect(payload.schema_version).toBe(SCHEMA_VERSION);
+    expect(payload.result).toEqual({
+      page: 1,
+      perPage: 20,
+      totalItems: 1,
+      totalPages: 1,
+      items: [{ id: "rec_1" }]
+    });
+    expect(payload.data).toEqual({
+      method: "GET",
+      url: "https://pb.example.com/api/collections/users/records?page=1",
+      status: 200,
+      data: {
+        page: 1,
+        perPage: 20,
+        totalItems: 1,
+        totalPages: 1,
+        items: [{ id: "rec_1" }]
+      }
+    });
     expect(payload.http).toEqual({
       method: "GET",
       url: "https://pb.example.com/api/collections/users/records?page=1",

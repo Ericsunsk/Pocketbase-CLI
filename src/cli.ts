@@ -10,6 +10,7 @@ const REPL_DISPATCH_CLI_CACHE = new WeakMap<AppContext, Command>();
 const REPL_ROOT_COMMANDS = new Set([
   "repl",
   "info",
+  "preflight",
   "schema",
   "raw",
   "config",

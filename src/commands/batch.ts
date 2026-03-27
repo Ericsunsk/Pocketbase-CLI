@@ -1,7 +1,8 @@
 import { Command } from "commander";
 
 import { AppContext, recordCommand } from "../app/context";
-import type { CommandDefinition, CommandParameter } from "../contract/command-registry";
+import type { CommandDefinition } from "../contract/command-registry";
+import { createJsonInputParameters, createObjectInputSchema } from "../contract/metadata";
 import { emitError } from "../core/output";
 import { loadJsonObjectInput } from "../input/json-input";
 import { parseBatchPayload } from "../input/remote-payloads";
@@ -12,41 +13,6 @@ type JsonInputOptions = {
   file?: string;
   stdinJson?: boolean;
 };
-
-function jsonInputParameters(): CommandParameter[] {
-  return [
-    {
-      kind: "option",
-      name: "--data",
-      names: ["--data"],
-      required: false,
-      takes_value: true,
-      is_flag: false,
-      nargs: 1,
-      type: "TEXT"
-    },
-    {
-      kind: "option",
-      name: "--file",
-      names: ["--file"],
-      required: false,
-      takes_value: true,
-      is_flag: false,
-      nargs: 1,
-      type: "TEXT"
-    },
-    {
-      kind: "option",
-      name: "--stdin-json",
-      names: ["--stdin-json"],
-      required: false,
-      takes_value: false,
-      is_flag: true,
-      nargs: 1,
-      type: "BOOLEAN"
-    }
-  ];
-}
 
 function buildHistory(options: JsonInputOptions): string {
   if (options.file === "-") {
@@ -82,7 +48,24 @@ export function createBatchDefinition(context: AppContext): CommandDefinition {
         authRequired: true,
         destructive: false,
         confirmationRequired: false,
-        parameters: jsonInputParameters(),
+        examples: [
+          "printf '{\"requests\":[{\"method\":\"POST\",\"url\":\"/api/collections/users/records\",\"body\":{\"email\":\"demo@example.com\"}}]}\\n' | pocketbase-cli --json batch run --stdin-json"
+        ],
+        notes: [
+          "Only a constrained subset of record CRUD endpoints is accepted by `batch run`."
+        ],
+        inputSchema: createObjectInputSchema({
+          description: "Validated PocketBase batch payload.",
+          properties: {
+            requests: {
+              type: "array",
+              description: "Non-empty array of record CRUD request objects."
+            }
+          },
+          required: ["requests"],
+          additionalProperties: true
+        }),
+        parameters: createJsonInputParameters(),
         build: () =>
           new Command("run")
             .description("Run a validated PocketBase batch request")

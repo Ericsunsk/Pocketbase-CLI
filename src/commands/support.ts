@@ -1,5 +1,5 @@
 import type { AppContext } from "../app/context";
-import { resolveAuthCollection, resolveBaseUrl } from "../app/context";
+import { normalizeBaseUrl, resolveAuthCollection, resolveBaseUrl } from "../app/context";
 import { emitError, emitSuccess } from "../core/output";
 import {
   PocketBaseRemoteClient,
@@ -20,14 +20,6 @@ type RemoteOperation<TData = unknown> = (
 
 function timeoutValue(context: AppContext): number | null {
   return context.state.config.timeout ?? null;
-}
-
-function normalizeBaseUrl(value?: string | null): string | null {
-  if (!value) {
-    return null;
-  }
-
-  return String(value).replace(/\/+$/, "");
 }
 
 export function buildRemoteClient(

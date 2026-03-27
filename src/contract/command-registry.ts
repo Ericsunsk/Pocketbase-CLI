@@ -16,6 +16,9 @@ export interface CommandParameter {
   default?: unknown;
   help?: string;
   type?: string;
+  choices?: string[];
+  conflicts_with?: string[];
+  sensitive?: boolean;
 }
 
 export interface CommandDefinition {
@@ -29,6 +32,8 @@ export interface CommandDefinition {
   confirmationRequired: boolean;
   confirmationFlag?: string | null;
   examples?: string[];
+  notes?: string[];
+  inputSchema?: Record<string, unknown> | null;
   parameters?: CommandParameter[];
   children?: CommandDefinition[];
   build?: () => Command;

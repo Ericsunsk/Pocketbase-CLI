@@ -30,6 +30,7 @@ Compared with calling the HTTP API directly, it adds:
 - command schema discovery for tools and LLM agents
 - stdin-first JSON input patterns
 - REPL support for iterative operator workflows
+- preflight readiness checks before a mutating or authenticated call
 - explicit safety rails for destructive mutations
 
 ## Key Capabilities
@@ -37,6 +38,7 @@ Compared with calling the HTTP API directly, it adds:
 - Remote-first administration for deployed PocketBase instances
 - Stable `--json` responses with `meta`, `result`, `error`, `http`, and `pagination`
 - Machine-readable `schema --json` contract for command discovery
+- Schema entries enriched with parameter help, enum choices, conflicts, examples, and `input_schema`
 - Direct file upload support with repeatable `--binary-file`
 - Idempotent collection provisioning with `collections ensure`
 - Guarded destructive operations via explicit `--yes`
@@ -70,6 +72,7 @@ npm i -g pocketbase-cli
 node dist/bin.js config set base_url https://pb.example.com
 node dist/bin.js config set auth_collection _superusers
 printf 'Secret123\n' | node dist/bin.js auth login --password-stdin admin@example.com
+node dist/bin.js --json preflight --require-auth
 node dist/bin.js --json info
 node dist/bin.js schema --json
 node dist/bin.js records list users --all
@@ -85,6 +88,7 @@ node dist/bin.js
 
 - `info`
 - `schema`
+- `preflight`
 - `auth login|logout|status|whoami|refresh`
 - `settings get|patch|test-s3|test-email|apple-client-secret`
 - `logs list|get|stats`
@@ -103,8 +107,10 @@ node dist/bin.js
 
 ## Behavior Notes
 
+- In `--json` mode, `result` is the decoded business payload. `data` preserves the raw transport wrapper when the command proxies an HTTP response.
 - `raw` requests are anonymous by default. Pass `--with-auth` to attach the saved remote auth token explicitly.
 - Changing persisted `base_url` or `auth_collection` clears a saved auth session when it no longer matches the configured target.
+- `preflight` is read-only and reports whether config, auth, and health checks are ready for the next remote command.
 
 ## Scope
 

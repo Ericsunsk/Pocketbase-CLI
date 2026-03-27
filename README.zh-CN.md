@@ -30,6 +30,7 @@
 - 面向工具和 LLM Agent 的 `schema --json` 命令契约
 - 更适合 Shell 和 Pipeline 的 stdin-first JSON 输入方式
 - 适合运维排障的 REPL 工作流
+- 在真正调用前先做状态校验的 `preflight`
 - 对破坏性操作更明确的安全护栏
 
 ## 核心能力
@@ -37,6 +38,7 @@
 - 面向已部署 PocketBase 的 Remote-first 管理能力
 - 稳定的 `--json` 输出，包含 `meta`、`result`、`error`、`http`、`pagination`
 - 可机读的 `schema --json` 命令发现能力
+- 更丰富的 schema 元数据，包括参数说明、枚举值、互斥关系、示例和 `input_schema`
 - 通过可重复的 `--binary-file` 直接上传文件
 - 通过 `collections ensure` 做幂等集合编排
 - 通过显式 `--yes` 保护破坏性操作
@@ -70,6 +72,7 @@ npm i -g pocketbase-cli
 node dist/bin.js config set base_url https://pb.example.com
 node dist/bin.js config set auth_collection _superusers
 printf 'Secret123\n' | node dist/bin.js auth login --password-stdin admin@example.com
+node dist/bin.js --json preflight --require-auth
 node dist/bin.js --json info
 node dist/bin.js schema --json
 node dist/bin.js records list users --all
@@ -85,6 +88,7 @@ node dist/bin.js
 
 - `info`
 - `schema`
+- `preflight`
 - `auth login|logout|status|whoami|refresh`
 - `settings get|patch|test-s3|test-email|apple-client-secret`
 - `logs list|get|stats`
@@ -103,8 +107,10 @@ node dist/bin.js
 
 ## 行为说明
 
+- 在 `--json` 模式下，`result` 表示解码后的业务结果；当命令直接代理 HTTP 响应时，`data` 会保留原始 transport wrapper。
 - `raw` 默认按匿名请求发送，不会自动附带已保存的 token；只有显式传入 `--with-auth` 才会附带远程登录态。
 - 当持久化的 `base_url` 或 `auth_collection` 与当前已保存登录态不再匹配时，CLI 会自动清理该登录态。
+- `preflight` 是只读命令，用来报告当前 config、auth 和 health 检查是否满足下一条远程命令的前置条件。
 
 ## 能力边界
 
