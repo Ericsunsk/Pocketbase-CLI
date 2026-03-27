@@ -1,6 +1,6 @@
 {
   "name": "pocketbase-cli",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "Remote-only PocketBase CLI (TypeScript)",
   "license": "MIT",
   "type": "commonjs",
