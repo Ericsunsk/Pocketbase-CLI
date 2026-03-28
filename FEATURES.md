@@ -1,65 +1,72 @@
-# PocketBase CLI
+# PocketBase CLI Feature Reference
 
-Target software: PocketBase
-Source path: `<repo-root>`
-Project path: `<repo-root>`
+This document summarizes the current product scope and runtime behavior of PocketBase CLI.
 
-## What This CLI Provides
+## Product Scope
 
-- Remote-only TypeScript CLI for deployed PocketBase instances
-- Default interactive REPL when no subcommand is provided
-- Machine-readable `--json` output mode
-- Machine-readable `schema --json` command contract for tools and LLMs
-- Read-only `preflight` command for readiness checks before the next remote call
-- One-shot command coverage for remote admin operations:
-  - auth and session management
-  - settings, logs, crons, collections, records, batch, files, and backups
-  - raw HTTP access for endpoints without a dedicated wrapper
-- Session config persistence plus `undo`/`redo` for remote defaults
-- Remote auth session persistence with saved base URL, token, and current record
-- stdin-first JSON input flows via `--file`, `--file -`, and `--stdin-json`
-- direct binary file uploads on record create/update/upsert via repeatable `--binary-file field=path`
-- secret-safe auth via `auth login --password-stdin`
-- explicit guardrails on destructive or side-effectful commands via `--yes`
-- pagination helpers via `--all`
-- filter helpers via `records find`, `records upsert`, and `records delete-by-filter`
-- idempotent collection provisioning via `collections ensure`
-- explicit ensure conflict policies via `--if-exists` and `--if-missing`
-- compact ensure output via `--output summary|full`
-- Best-effort `/api/health` probe in `info`
-- Canonical command surface and examples live in `README.en.md` and `README.zh-CN.md`
+PocketBase CLI is a remote-only TypeScript command-line client for deployed PocketBase instances. It does not wrap the local PocketBase binary or local process lifecycle commands.
 
-## Backend Strategy
+The CLI is designed for:
 
-This CLI no longer wraps the local PocketBase CLI.
+- operators managing deployed PocketBase instances
+- automation and CI workflows
+- agent tooling that needs a stable command surface and structured output
+- scripted maintenance and administrative tasks
 
-All operational commands use PocketBase's HTTP API against a remote deployment. The intended primary auth flow is PocketBase `superuser` login against the `_superusers` collection.
+## Supported Command Surface
 
-## Notes
+PocketBase CLI currently covers:
 
-- Session history, config, and auth state are stored in `~/.cache/pocketbase-cli` by default.
-- The CLI attempts to restrict the session file permissions to `0600`.
+- authentication and auth status inspection
+- settings, logs, and cron operations
+- collections management and idempotent `collections ensure`
+- record CRUD plus auth flows for auth collections
+- files URL and file token helpers
+- remote backup listing, creation, upload, download, restore, and deletion
+- JSON-based record batch mutations
+- raw HTTP access for remote endpoints without a dedicated wrapper
+- REPL, history, undo, redo, config, schema, and preflight support
+
+## Authentication and State
+
+- The primary login flow is remote PocketBase superuser authentication against `_superusers`, unless another auth collection is configured.
+- `auth login` accepts credentials from command arguments or `--password-stdin`.
+- `auth login-browser` starts a temporary local server on `127.0.0.1` and presents a browser form for credential entry. It supports `--no-open` for headless environments.
+- Persisted config, history, and auth state are stored under `~/.cache/pocketbase-cli` by default.
+- The persisted session file is encrypted at rest and uses a sibling `session.json.key` file for local decryption.
+- The CLI attempts to restrict both the encrypted session file and the key file to `0600` permissions.
 - Supported persisted config keys are `base_url`, `auth_collection`, and `timeout`.
-- JSON output now exposes a stable envelope with `meta`, `result`, structured `error`, `http`, and `pagination`.
-- In JSON output, `result` is the decoded business payload while `data` preserves the raw transport wrapper when a command proxies a remote HTTP response.
-- The schema contract now includes parameter help, enum choices, mutual exclusions, examples, and per-command `input_schema` where available.
-- `files url` is a helper that builds PocketBase file URLs and can optionally fetch a temporary file token via `/api/files/token`.
-- `raw` stays anonymous unless `--with-auth` is passed explicitly.
-- `preflight` reports whether `base_url`, auth state, and `/api/health` are ready for the next command without mutating session state.
-- `logs stats` wraps `/api/logs/stats` for quick operational summaries without falling back to `raw`.
-- `crons` wraps `/api/crons` list/run operations.
-- `collections` now covers the documented remote collection management routes instead of only list/get.
-- `collections ensure` provides an idempotent create-or-update helper keyed by payload `name`.
-- `collections ensure` can also be tightened with `--if-exists update|fail` and `--if-missing create|fail` for stricter agent control.
-- `collections ensure --output summary` returns a compact agent-oriented result instead of the full remote body.
-- `records` now covers the major documented auth flows for auth collections, including `auth-with-oauth2`, plus higher-level `find`, `upsert`, and `delete-by-filter` helpers for agent workflows.
-- `settings` now covers the documented S3/email test routes and Apple client secret generation route.
-- `backups` wraps the remote backup list/create/delete endpoints that are relevant for deployed VPS setups.
-- `backups upload` wraps the documented multipart upload endpoint for restoring externally prepared archives into the remote backup store.
-- `backups download` uses a temporary file token and writes the archive locally.
-- `backups delete` and `backups restore` are intentionally guarded by `--yes`.
-- `collections delete`, `collections truncate`, `records delete`, `records delete-by-filter`, and `crons run` are also intentionally guarded by `--yes`.
-- `batch run` wraps `/api/batch` for JSON-based record batch mutations and supports `--data`, `--file`, `--file -`, or `--stdin-json`.
-- Updating persisted `base_url` or `auth_collection` clears saved auth state when the saved session no longer targets the configured instance.
-- Local process-oriented commands are intentionally removed from the CLI model because they are not meaningful for a remote VPS deployment.
-- Remaining deliberate gaps relative to the official docs are `realtime`.
+- Supported environment defaults are intentionally limited to `POCKETBASE_CLI_BASE_URL` and `POCKETBASE_CLI_STATE_DIR`.
+- Changing persisted `base_url` or `auth_collection` clears saved auth state when it no longer matches the configured target.
+
+## Safety and Validation
+
+- Destructive or side-effectful commands require explicit confirmation through `--yes`.
+- `raw` requests remain anonymous unless `--with-auth` is passed explicitly.
+- `preflight` is read-only and reports whether `base_url`, auth state, and `/api/health` are ready for the next remote command.
+- Base URL values are normalized and validated before remote calls. Invalid URLs, embedded credentials, query strings, and fragments are rejected early.
+- Sensitive values such as passwords, file tokens, backup tokens, OAuth2 codes, and code verifiers are redacted from command history and JSON success output where applicable.
+
+## Output and Automation
+
+- `--json` exposes a stable envelope containing `meta`, `result`, structured `error`, `http`, and `pagination`.
+- When a command proxies a remote HTTP response, `result` contains the decoded business payload and `data` preserves the raw transport wrapper.
+- `schema --json` provides a machine-readable command contract with parameter metadata, examples, enum choices, conflicts, and `input_schema` where available.
+- The REPL reuses the same envelope format for JSON output and supports command history redaction.
+
+## Remote Coverage Notes
+
+- `collections ensure` provides idempotent create-or-update behavior keyed by collection name and supports `--if-exists`, `--if-missing`, and `--output summary|full`.
+- `records` covers common auth flows for auth collections, including password, OAuth2, OTP, refresh, password reset, verification, email change, and impersonation helpers.
+- `records find`, `records upsert`, and `records delete-by-filter` provide higher-level helpers for automation and agent workflows.
+- `files url` can generate file URLs and optionally fetch a temporary file token.
+- `backups download` fetches archive bytes with binary-safe response handling and writes private local files.
+- `batch run` wraps `/api/batch` for JSON-based record mutations and supports `--data`, `--file`, `--file -`, or `--stdin-json`.
+
+## Out of Scope
+
+The following are intentionally outside the current product scope:
+
+- local PocketBase process commands such as `serve`, `migrate`, and `update`
+- direct realtime transport wrappers
+- local superuser bootstrap flows tied to the embedded PocketBase binary

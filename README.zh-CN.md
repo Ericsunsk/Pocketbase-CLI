@@ -20,28 +20,29 @@
 | 目标对象 | 已部署的 PocketBase 实例 |
 | 典型场景 | 运维、自动化脚本、Agent Tooling |
 
-## 为什么做这个项目
+## 项目定位
 
-`pocketbase-cli` 基于 PocketBase HTTP API 提供了一套统一的远程管理命令面，覆盖 auth、settings、logs、crons、collections、records、files、backups 以及 raw request 等常见操作。
+`pocketbase-cli` 基于 PocketBase HTTP API 提供统一的远程命令面，覆盖认证、settings、logs、crons、collections、records、files、backups 和原始 HTTP 请求等常见操作。
 
-相比直接调用 HTTP API，这个项目额外提供了：
+相比直接拼 HTTP 请求，它额外提供：
 
 - 面向自动化的稳定 JSON Envelope
-- 面向工具和 LLM Agent 的 `schema --json` 命令契约
+- 面向工具和 LLM Agent 的命令发现能力
 - 更适合 Shell 和 Pipeline 的 stdin-first JSON 输入方式
-- 适合运维排障的 REPL 工作流
 - 在真正调用前先做状态校验的 `preflight`
-- 对破坏性操作更明确的安全护栏
+- 对破坏性操作更明确的确认护栏
+- 适合运维排障的 REPL 工作流
 
 ## 核心能力
 
 - 面向已部署 PocketBase 的 Remote-first 管理能力
 - 稳定的 `--json` 输出，包含 `meta`、`result`、`error`、`http`、`pagination`
-- 可机读的 `schema --json` 命令发现能力
-- 更丰富的 schema 元数据，包括参数说明、枚举值、互斥关系、示例和 `input_schema`
+- 可机读的 `schema --json` 命令契约
+- 通过 `auth login-browser` 提供本地 loopback 浏览器登录
 - 通过可重复的 `--binary-file` 直接上传文件
 - 通过 `collections ensure` 做幂等集合编排
-- 通过显式 `--yes` 保护破坏性操作
+- 已保存的 auth、config、history 状态会加密持久化
+- 通过显式 `--yes` 保护破坏性或有副作用的操作
 
 ## 安装方式
 
@@ -60,7 +61,7 @@ node dist/bin.js --help
 
 ### 全局安装
 
-如果后续发布到 npm，并且你希望在仓库之外也能直接使用命令，可以这样安装：
+如果后续发布到 npm，并且你希望在仓库之外直接使用命令：
 
 ```sh
 npm i -g pocketbase-cli
@@ -69,8 +70,7 @@ npm i -g pocketbase-cli
 ## 快速开始
 
 ```sh
-cp .env.example .env
-# 编辑 .env，填写 POCKETBASE_CLI_BASE_URL
+node dist/bin.js config set base_url https://pb.example.com
 
 printf 'Secret123\n' | node dist/bin.js auth login --password-stdin admin@example.com
 node dist/bin.js --json preflight --require-auth
@@ -79,23 +79,13 @@ node dist/bin.js schema --json
 node dist/bin.js records list users --all
 ```
 
-`.env` 也可以放 `auth login` 需要的默认认证信息：
-
-```env
-POCKETBASE_CLI_BASE_URL=https://pb.example.com
-POCKETBASE_CLI_AUTH_IDENTITY=admin@example.com
-POCKETBASE_CLI_AUTH_PASSWORD=Secret123
-```
-
-然后可以直接执行：
+替代认证方式：
 
 ```sh
-node dist/bin.js auth login
-# 或：
 node dist/bin.js auth login-browser
+# 无头环境：
+node dist/bin.js auth login-browser --no-open
 ```
-
-优先级保持为：命令行参数 > 持久化 `config set ...` > `.env` 默认值 > 已保存登录态目标。
 
 不带子命令直接运行会进入 REPL：
 
@@ -108,7 +98,7 @@ node dist/bin.js
 - `info`
 - `schema`
 - `preflight`
-- `auth login|logout|status|whoami|refresh`
+- `auth login|login-browser|logout|status|whoami|refresh`
 - `settings get|patch|test-s3|test-email|apple-client-secret`
 - `logs list|get|stats`
 - `crons list|run`
@@ -124,12 +114,36 @@ node dist/bin.js
 - `history`
 - `repl`
 
+## 配置与状态
+
+Base URL 解析优先级为：
+
+`命令行参数 > 持久化 config > POCKETBASE_CLI_BASE_URL > 已保存登录态目标地址`
+
+支持的环境变量：
+
+- `POCKETBASE_CLI_BASE_URL`：默认远程目标地址
+- `POCKETBASE_CLI_STATE_DIR`：覆盖本地状态目录
+
+凭据输入方式：
+
+- `auth login` 只从命令参数或 `--password-stdin` 读取凭据
+- `auth login-browser` 提供本地浏览器表单，并支持无头环境使用 `--no-open`
+- 不再支持从环境变量回退身份或密码
+
+本地状态存储：
+
+- history、config 和 auth 状态默认保存在 `~/.cache/pocketbase-cli`
+- 持久化的 session 文件会加密落盘
+- 相邻的 `session.json.key` 文件保存本地解密材料
+
 ## 行为说明
 
 - 在 `--json` 模式下，`result` 表示解码后的业务结果；当命令直接代理 HTTP 响应时，`data` 会保留原始 transport wrapper。
-- `raw` 默认按匿名请求发送，不会自动附带已保存的 token；只有显式传入 `--with-auth` 才会附带远程登录态。
-- 当持久化的 `base_url` 或 `auth_collection` 与当前已保存登录态不再匹配时，CLI 会自动清理该登录态。
-- `preflight` 是只读命令，用来报告当前 config、auth 和 health 检查是否满足下一条远程命令的前置条件。
+- `raw` 默认按匿名请求发送；只有显式传入 `--with-auth` 才会附带已保存的远程 token。
+- 当持久化的 `base_url` 或 `auth_collection` 与当前已保存登录态不匹配时，CLI 会自动清理该登录态。
+- `preflight` 是只读命令，用来报告当前 config、auth 和 health 检查是否满足下一条远程命令的前置条件；如果 `base_url` 本身不合法，也会在发起远程探测前直接报错。
+- `auth login-browser` 会在 `127.0.0.1` 上启动一个临时本地服务，凭据不会通过远程回调地址传输。
 
 ## 能力边界
 
@@ -156,12 +170,11 @@ pocketbase/
 ├── README.md
 ├── README.en.md
 ├── README.zh-CN.md
+├── CHANGELOG.md
 ├── DEVELOPMENT.md
 ├── FEATURES.md
 ├── TESTING.md
 ├── package.json
-├── tsconfig.json
-├── tsup.config.ts
 ├── src/
 ├── test/
 └── dist/
@@ -170,7 +183,8 @@ pocketbase/
 ## 文档导航
 
 - [`README.md`](README.md)：双语入口页
-- [`README.en.md`](README.en.md)：英文说明
-- [`FEATURES.md`](FEATURES.md)：功能范围与行为说明
-- [`DEVELOPMENT.md`](DEVELOPMENT.md)：开发说明
-- [`TESTING.md`](TESTING.md)：测试范围与验证命令
+- [`README.en.md`](README.en.md)：英文指南
+- [`FEATURES.md`](FEATURES.md)：功能与行为参考
+- [`DEVELOPMENT.md`](DEVELOPMENT.md)：开发与构建指南
+- [`TESTING.md`](TESTING.md)：测试策略与验证说明
+- [`CHANGELOG.md`](CHANGELOG.md)：发布说明

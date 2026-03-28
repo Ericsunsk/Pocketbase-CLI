@@ -2,37 +2,21 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createRawDefinition } from "../../src/commands/raw";
 import { CliExitError } from "../../src/core/output";
-import { SessionState, SessionStore } from "../../src/core/session-store";
+import { makeContext } from "./helpers/context";
+import { silenceProcessOutput } from "./helpers/output";
 
 function buildContext(options?: {
   configBaseUrl?: string;
   remoteAuthBaseUrl?: string;
 }) {
-  const store = new SessionStore("/tmp/pocketbase-cli-raw-session.json");
-  const state = new SessionState();
-
-  if (options?.configBaseUrl !== undefined) {
-    state.setConfig("base_url", options.configBaseUrl);
-  } else {
-    state.setConfig("base_url", "https://pb.example.com");
-  }
-
-  state.setRemoteAuth({
-    baseUrl: options?.remoteAuthBaseUrl ?? "https://pb.example.com",
+  return makeContext({
+    storePath: "/tmp/pocketbase-cli-raw-session.json",
+    jsonMode: true,
+    baseUrl: options?.configBaseUrl ?? "https://pb.example.com",
+    authed: true,
+    authBaseUrl: options?.remoteAuthBaseUrl,
     token: "secret-token"
   });
-
-  return {
-    version: "0.1.0",
-    jsonMode: true,
-    store,
-    state
-  };
-}
-
-function silenceProcessOutput(): void {
-  vi.spyOn(process.stdout, "write").mockImplementation(() => true);
-  vi.spyOn(process.stderr, "write").mockImplementation(() => true);
 }
 
 describe("raw command", () => {
@@ -86,6 +70,31 @@ describe("raw command", () => {
       })
     });
     expect(context.state.commandHistory.at(-1)).toBe("raw GET /probe --with-auth");
+  });
+
+  it("redacts raw history query strings and fragments", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      text: async () => JSON.stringify({ ok: true })
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    silenceProcessOutput();
+
+    const context = buildContext();
+    const command = createRawDefinition(context).build?.();
+
+    await command?.parseAsync([
+      "node",
+      "raw",
+      "GET",
+      "/probe/path?token=secret-token&expand=profile#section"
+    ]);
+
+    expect(context.state.commandHistory.at(-1)).toBe(
+      "raw GET /probe/path?<redacted>#<redacted>"
+    );
   });
 
   it("rejects --with-auth when saved auth targets a different base URL", async () => {

@@ -1,34 +1,24 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { createCli } from "../../src/cli";
-import { SessionState, SessionStore } from "../../src/core/session-store";
+import { makeContext } from "./helpers/context";
+import { captureStdout } from "./helpers/output";
 
 function createContext() {
-  const state = new SessionState();
-  state.setRemoteAuth({
-    baseUrl: "https://prod.example.com",
-    token: "secret-token",
-    collection: "_superusers"
-  });
-
-  return {
-    version: "0.1.0",
+  return makeContext({
+    storePath: "/tmp/pocketbase-cli-config-test-session.json",
     jsonMode: true,
-    store: new SessionStore("/tmp/pocketbase-cli-config-test-session.json"),
-    state
-  };
+    authBaseUrl: "https://prod.example.com",
+    authCollection: "_superusers",
+    token: "secret-token"
+  });
 }
 
 describe("config commands", () => {
   it("clears saved auth when base_url is changed to a different target", async () => {
     const context = createContext();
     const cli = createCli(context);
-    const writes: string[] = [];
-
-    vi.spyOn(process.stdout, "write").mockImplementation((chunk: string | Uint8Array) => {
-      writes.push(String(chunk));
-      return true;
-    });
+    const stdout = captureStdout();
 
     try {
       await cli.parseAsync([
@@ -41,10 +31,10 @@ describe("config commands", () => {
         "https://staging.example.com"
       ]);
     } finally {
-      vi.restoreAllMocks();
+      stdout.restore();
     }
 
-    const payload = JSON.parse(writes.join("").trim()) as {
+    const payload = JSON.parse(stdout.output.join("").trim()) as {
       message: string;
       data: { auth_cleared: boolean };
     };

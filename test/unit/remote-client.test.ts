@@ -100,4 +100,95 @@ describe("PocketBaseRemoteClient", () => {
       })
     });
   });
+
+  it("merges list and record query parameters for recordsList", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      text: async () => '{"items":[]}'
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = new PocketBaseRemoteClient({
+      baseUrl: "https://pb.example.com",
+      token: "secret-token"
+    });
+
+    await client.recordsList({
+      collection: "posts",
+      page: 2,
+      perPage: 50,
+      filterValue: 'status = "published"',
+      sort: "-created",
+      fields: "id,title",
+      expand: "author"
+    });
+
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
+      "https://pb.example.com/api/collections/posts/records?page=2&perPage=50&filter=status+%3D+%22published%22&sort=-created&fields=id%2Ctitle&expand=author"
+    );
+  });
+
+  it("downloads backup bytes with binary accept headers", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = new PocketBaseRemoteClient({
+      baseUrl: "https://pb.example.com",
+      token: "secret-token"
+    });
+
+    const result = await client.backupsDownload({
+      name: "nightly.zip",
+      token: "file-token"
+    });
+
+    expect(Array.from(result.data)).toEqual([1, 2, 3]);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://pb.example.com/api/backups/nightly.zip?token=file-token",
+      expect.objectContaining({
+        method: "GET",
+        headers: expect.objectContaining({
+          Accept: "*/*",
+          "User-Agent": "pocketbase-cli/0.1"
+        })
+      })
+    );
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+      headers: expect.not.objectContaining({
+        Authorization: "secret-token"
+      })
+    });
+  });
+
+  it("wraps binary endpoint failures as PocketBaseRemoteError", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      statusText: "Internal Server Error",
+      arrayBuffer: async () => new TextEncoder().encode('{"message":"boom"}').buffer
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = new PocketBaseRemoteClient({
+      baseUrl: "https://pb.example.com"
+    });
+
+    await expect(
+      client.backupsDownload({
+        name: "nightly.zip",
+        token: "file-token"
+      })
+    ).rejects.toMatchObject({
+      message: "boom",
+      status: 500,
+      url: "https://pb.example.com/api/backups/nightly.zip?token=file-token"
+    });
+  });
 });

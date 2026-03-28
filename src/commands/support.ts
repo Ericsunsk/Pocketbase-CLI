@@ -6,11 +6,12 @@ import {
   PocketBaseRemoteError,
   RemoteResult
 } from "../http/remote-client";
+import { parseBaseUrlValue } from "../input/validators";
 
 export const RECORD_BASE_URL_REQUIRED_MESSAGE =
-  "Base URL is required. Set `POCKETBASE_CLI_BASE_URL` in `.env` or run `config set base_url <url>` first.";
+  "Base URL is required. Run `config set base_url <url>` first or pass `--base-url`.";
 export const LOGIN_BASE_URL_REQUIRED_MESSAGE =
-  "Base URL is required. Pass `--base-url`, set `POCKETBASE_CLI_BASE_URL` in `.env`, or persist it with `config set base_url <url>`.";
+  "Base URL is required. Pass `--base-url` or persist it with `config set base_url <url>`.";
 export const FILE_TOKEN_RESPONSE_ERROR_MESSAGE =
   "File token response did not include a usable token.";
 
@@ -20,6 +21,28 @@ type RemoteOperation<TData = unknown> = (
 
 function timeoutValue(context: AppContext): number | null {
   return context.state.config.timeout ?? null;
+}
+
+function validateBaseUrlForAction(
+  context: AppContext,
+  options: {
+    action: string;
+    baseUrl: string;
+    sourceName: string;
+  }
+): string {
+  try {
+    return parseBaseUrlValue(options.sourceName, options.baseUrl);
+  } catch (error) {
+    emitError({
+      jsonOutput: context.jsonMode,
+      action: options.action,
+      message: error instanceof Error ? error.message : String(error),
+      errorType: "invalid_input",
+      hint:
+        "Use a valid absolute http:// or https:// URL, for example https://pb.example.com or http://127.0.0.1:8090."
+    });
+  }
 }
 
 export function buildRemoteClient(
@@ -32,21 +55,26 @@ export function buildRemoteClient(
   }
 ): PocketBaseRemoteClient {
   const action = options?.action ?? "remote";
-  const baseUrl = resolveBaseUrl(context, options?.baseUrl);
+  const rawBaseUrl = resolveBaseUrl(context, options?.baseUrl);
   const collection = resolveAuthCollection(context, options?.collection);
 
-  if (!baseUrl) {
+  if (!rawBaseUrl) {
     emitError({
       jsonOutput: context.jsonMode,
       action,
       message:
-        "Remote base URL is not configured. Set `POCKETBASE_CLI_BASE_URL` in `.env`, run `config set base_url <url>`, or use `auth login --base-url <url>` first.",
+        "Remote base URL is not configured. Run `config set base_url <url>` or use `auth login --base-url <url>` first.",
       errorType: "missing_prerequisite",
       hint:
-        "Set `POCKETBASE_CLI_BASE_URL` in `.env`, persist a base URL with `config set base_url <url>`, or pass `auth login --base-url <url>`.",
+        "Persist a base URL with `config set base_url <url>` or pass `auth login --base-url <url>`.",
       missingPrerequisite: "base_url"
     });
   }
+  const baseUrl = validateBaseUrlForAction(context, {
+    action,
+    baseUrl: rawBaseUrl,
+    sourceName: options?.baseUrl !== undefined ? "--base-url" : "base_url"
+  });
 
   const authBaseUrl = normalizeBaseUrl(context.state.remoteAuth.base_url);
   const authCollection = String(context.state.remoteAuth.collection ?? "_superusers");
@@ -95,20 +123,24 @@ export function requireBaseUrl(
     message?: string;
   }
 ): string {
-  const resolvedBaseUrl = resolveBaseUrl(context, options?.baseUrl);
-  if (!resolvedBaseUrl) {
+  const rawBaseUrl = resolveBaseUrl(context, options?.baseUrl);
+  if (!rawBaseUrl) {
     emitError({
       jsonOutput: context.jsonMode,
       action: options?.action ?? "remote",
       message: options?.message ?? RECORD_BASE_URL_REQUIRED_MESSAGE,
       errorType: "missing_prerequisite",
       hint:
-        "Set `POCKETBASE_CLI_BASE_URL` in `.env`, persist a PocketBase base URL with `config set base_url <url>`, or provide it explicitly.",
+        "Persist a PocketBase base URL with `config set base_url <url>` or provide it explicitly with `--base-url`.",
       missingPrerequisite: "base_url"
     });
   }
 
-  return resolvedBaseUrl;
+  return validateBaseUrlForAction(context, {
+    action: options?.action ?? "remote",
+    baseUrl: rawBaseUrl,
+    sourceName: options?.baseUrl !== undefined ? "--base-url" : "base_url"
+  });
 }
 
 export function emitRemoteResult(

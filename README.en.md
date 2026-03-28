@@ -20,28 +20,29 @@ Standalone remote CLI for deployed [PocketBase](https://github.com/pocketbase/po
 | Target | Deployed PocketBase instances |
 | Best for | operators, automation, agent tooling |
 
-## Why This Project
+## Why PocketBase CLI
 
-`pocketbase-cli` wraps the PocketBase HTTP API behind a consistent, automation-friendly command surface for remote operations such as auth, settings, logs, crons, collections, records, files, backups, and raw requests.
+`pocketbase-cli` wraps the PocketBase HTTP API behind a consistent command surface for remote operations such as authentication, settings, logs, crons, collections, records, files, backups, and raw HTTP requests.
 
-Compared with calling the HTTP API directly, it adds:
+Compared with issuing HTTP calls directly, it adds:
 
 - stable JSON envelopes for automation
 - command schema discovery for tools and LLM agents
 - stdin-first JSON input patterns
+- preflight readiness checks before authenticated or mutating calls
+- explicit confirmation rails for destructive operations
 - REPL support for iterative operator workflows
-- preflight readiness checks before a mutating or authenticated call
-- explicit safety rails for destructive mutations
 
 ## Key Capabilities
 
 - Remote-first administration for deployed PocketBase instances
 - Stable `--json` responses with `meta`, `result`, `error`, `http`, and `pagination`
 - Machine-readable `schema --json` contract for command discovery
-- Schema entries enriched with parameter help, enum choices, conflicts, examples, and `input_schema`
+- Browser-assisted login through a local loopback form with `auth login-browser`
 - Direct file upload support with repeatable `--binary-file`
 - Idempotent collection provisioning with `collections ensure`
-- Guarded destructive operations via explicit `--yes`
+- Encrypted session persistence at rest for stored auth, config, and history state
+- Explicit `--yes` guardrails for destructive or side-effectful operations
 
 ## Installation
 
@@ -69,8 +70,7 @@ npm i -g pocketbase-cli
 ## Quick Start
 
 ```sh
-cp .env.example .env
-# edit .env and set POCKETBASE_CLI_BASE_URL
+node dist/bin.js config set base_url https://pb.example.com
 
 printf 'Secret123\n' | node dist/bin.js auth login --password-stdin admin@example.com
 node dist/bin.js --json preflight --require-auth
@@ -79,23 +79,13 @@ node dist/bin.js schema --json
 node dist/bin.js records list users --all
 ```
 
-`.env` can also hold the default auth settings used by `auth login`:
-
-```env
-POCKETBASE_CLI_BASE_URL=https://pb.example.com
-POCKETBASE_CLI_AUTH_IDENTITY=admin@example.com
-POCKETBASE_CLI_AUTH_PASSWORD=Secret123
-```
-
-Then you can run:
+Alternative authentication flow:
 
 ```sh
-node dist/bin.js auth login
-# or:
 node dist/bin.js auth login-browser
+# headless hosts:
+node dist/bin.js auth login-browser --no-open
 ```
-
-Priority remains: command-line args > persisted `config set ...` values > `.env` defaults > saved auth target.
 
 Run without a subcommand to enter REPL mode:
 
@@ -108,7 +98,7 @@ node dist/bin.js
 - `info`
 - `schema`
 - `preflight`
-- `auth login|logout|status|whoami|refresh`
+- `auth login|login-browser|logout|status|whoami|refresh`
 - `settings get|patch|test-s3|test-email|apple-client-secret`
 - `logs list|get|stats`
 - `crons list|run`
@@ -124,12 +114,36 @@ node dist/bin.js
 - `history`
 - `repl`
 
+## Configuration and State
+
+Base URL resolution priority is:
+
+`command-line arguments > persisted config > POCKETBASE_CLI_BASE_URL > stored auth session target`
+
+Supported environment variables:
+
+- `POCKETBASE_CLI_BASE_URL`: default remote base URL
+- `POCKETBASE_CLI_STATE_DIR`: override the local state directory
+
+Credential handling:
+
+- `auth login` reads credentials only from command arguments or `--password-stdin`
+- `auth login-browser` provides a local browser form and supports `--no-open` for headless environments
+- environment-based credential fallbacks are intentionally unsupported
+
+Session storage:
+
+- history, config, and auth state are stored under `~/.cache/pocketbase-cli` by default
+- the persisted session file is encrypted at rest
+- a neighboring `session.json.key` file stores local decryption material
+
 ## Behavior Notes
 
-- In `--json` mode, `result` is the decoded business payload. `data` preserves the raw transport wrapper when the command proxies an HTTP response.
+- In `--json` mode, `result` contains the decoded business payload. `data` preserves the raw transport wrapper when a command proxies an HTTP response.
 - `raw` requests are anonymous by default. Pass `--with-auth` to attach the saved remote auth token explicitly.
-- Changing persisted `base_url` or `auth_collection` clears a saved auth session when it no longer matches the configured target.
-- `preflight` is read-only and reports whether config, auth, and health checks are ready for the next remote command.
+- Changing persisted `base_url` or `auth_collection` clears a stored auth session when it no longer matches the configured target.
+- `preflight` is read-only and reports whether config, auth, and health checks are ready for the next remote command. It also surfaces invalid configured base URLs before probing the remote server.
+- `auth login-browser` starts a temporary server on `127.0.0.1` and keeps credentials on the local machine.
 
 ## Scope
 
@@ -156,12 +170,11 @@ pocketbase/
 ├── README.md
 ├── README.en.md
 ├── README.zh-CN.md
+├── CHANGELOG.md
 ├── DEVELOPMENT.md
 ├── FEATURES.md
 ├── TESTING.md
 ├── package.json
-├── tsconfig.json
-├── tsup.config.ts
 ├── src/
 ├── test/
 └── dist/
@@ -170,7 +183,8 @@ pocketbase/
 ## Documentation
 
 - [`README.md`](README.md): bilingual landing page
-- [`README.zh-CN.md`](README.zh-CN.md): Chinese overview
-- [`FEATURES.md`](FEATURES.md): feature scope and behavior notes
-- [`DEVELOPMENT.md`](DEVELOPMENT.md): development notes
-- [`TESTING.md`](TESTING.md): validation commands and test coverage
+- [`README.zh-CN.md`](README.zh-CN.md): Chinese guide
+- [`FEATURES.md`](FEATURES.md): feature and behavior reference
+- [`DEVELOPMENT.md`](DEVELOPMENT.md): contributor and build guide
+- [`TESTING.md`](TESTING.md): test strategy and validation guide
+- [`CHANGELOG.md`](CHANGELOG.md): release notes

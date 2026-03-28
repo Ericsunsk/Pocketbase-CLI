@@ -9,11 +9,24 @@ import {
 import type { CommandDefinition } from "../contract/command-registry";
 import { emitSuccess } from "../core/output";
 import { PocketBaseRemoteClient, PocketBaseRemoteError } from "../http/remote-client";
+import { parseBaseUrlValue } from "../input/validators";
 
 async function probeHealth(context: AppContext): Promise<Record<string, unknown> | null> {
-  const resolvedBaseUrl = resolveBaseUrl(context);
-  if (!resolvedBaseUrl) {
+  const rawResolvedBaseUrl = resolveBaseUrl(context);
+  if (!rawResolvedBaseUrl) {
     return null;
+  }
+
+  let resolvedBaseUrl: string;
+  try {
+    resolvedBaseUrl = parseBaseUrlValue("base_url", rawResolvedBaseUrl);
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : String(error),
+      status: 0,
+      url: rawResolvedBaseUrl
+    };
   }
 
   const client = new PocketBaseRemoteClient({
@@ -70,9 +83,7 @@ export function createInfoDefinition(context: AppContext): CommandDefinition {
             mode: "remote",
             active_config: context.state.config,
             env_config: {
-              base_url: context.envConfig?.base_url ?? null,
-              auth_identity: context.envConfig?.auth_identity ?? null,
-              auth_password_present: Boolean(context.envConfig?.auth_password)
+              base_url: context.envConfig?.base_url ?? null
             },
             resolved_base_url: resolveBaseUrl(context),
             resolved_auth_collection: resolveAuthCollection(context),

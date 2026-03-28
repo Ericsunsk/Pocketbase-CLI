@@ -1,7 +1,8 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { createCli } from "../../src/cli";
 import { SessionState, SessionStore } from "../../src/core/session-store";
+import { captureStdout } from "./helpers/output";
 
 describe("createCli", () => {
   it("registers migrated commands on the root program", () => {
@@ -41,17 +42,11 @@ describe("createCli", () => {
       state: new SessionState()
     });
 
-    const stdout: string[] = [];
-    const originalWrite = process.stdout.write.bind(process.stdout);
+    const stdout = captureStdout();
     const stdin = process.stdin as NodeJS.ReadStream & {
       [Symbol.asyncIterator]?: () => AsyncIterator<string>;
     };
     const originalIterator = stdin[Symbol.asyncIterator];
-
-    vi.spyOn(process.stdout, "write").mockImplementation((chunk: string | Uint8Array) => {
-      stdout.push(String(chunk));
-      return true;
-    });
 
     stdin[Symbol.asyncIterator] = async function* (): AsyncGenerator<string> {
       yield "info\nexit\n";
@@ -60,8 +55,7 @@ describe("createCli", () => {
     try {
       await cli.parseAsync(["node", "pocketbase-cli", "--json"]);
     } finally {
-      (process.stdout.write as unknown as ReturnType<typeof vi.spyOn>).mockRestore?.();
-      process.stdout.write = originalWrite as typeof process.stdout.write;
+      stdout.restore();
       if (originalIterator) {
         stdin[Symbol.asyncIterator] = originalIterator;
       } else {
@@ -72,7 +66,7 @@ describe("createCli", () => {
       }
     }
 
-    const payloads = stdout
+    const payloads = stdout.output
       .join("")
       .trim()
       .split("\n")

@@ -12,22 +12,16 @@ Standalone remote CLI for deployed [PocketBase](https://github.com/pocketbase/po
 
 ## Overview
 
-PocketBase CLI provides a consistent command surface for remote administration, scripting, and agent-driven workflows.
+PocketBase CLI provides a consistent command surface for remote administration, automation, and agent-driven workflows. It wraps the PocketBase HTTP API with stable command semantics, explicit confirmation guards, and machine-readable output designed for scripts and tools.
 
-- Remote-first operations for deployed PocketBase instances
-- Stable `--json` output for scripts and integrations
-- Machine-readable `schema --json` command contract for tools and LLM agents
-- REPL mode for iterative operator workflows
-- Explicit `--yes` guardrails for destructive commands
+## Highlights
 
-## Documentation
-
-- [`README.en.md`](README.en.md): full English overview
-- [`README.zh-CN.md`](README.zh-CN.md): 完整中文说明
-- [`FEATURES.md`](FEATURES.md): feature scope and behavior notes
-- [`DEVELOPMENT.md`](DEVELOPMENT.md): development notes
-- [`TESTING.md`](TESTING.md): validation commands and test coverage
-- [`CHANGELOG.md`](CHANGELOG.md): release notes and notable changes
+- Remote-first administration for deployed PocketBase instances
+- Stable `--json` output for automation and integrations
+- Machine-readable `schema --json` command contract
+- Browser-assisted login with `auth login-browser`
+- Encrypted local persistence for stored auth, config, and command history
+- Explicit `--yes` guardrails for destructive or side-effectful operations
 
 ## Quick Start
 
@@ -35,38 +29,31 @@ PocketBase CLI provides a consistent command surface for remote administration, 
 npm install
 npm run build
 
-cp .env.example .env
-# edit .env and set POCKETBASE_CLI_BASE_URL
+node dist/bin.js config set base_url https://pb.example.com
 
 printf 'Secret123\n' | node dist/bin.js auth login --password-stdin admin@example.com
 node dist/bin.js --json info
 ```
 
-`.env` can also hold the default auth settings used by `auth login`:
-
-```env
-POCKETBASE_CLI_BASE_URL=https://pb.example.com
-POCKETBASE_CLI_AUTH_IDENTITY=admin@example.com
-POCKETBASE_CLI_AUTH_PASSWORD=Secret123
-```
-
-Then you can run:
+Alternative authentication flow:
 
 ```sh
-node dist/bin.js auth login
-# or:
 node dist/bin.js auth login-browser
+# headless hosts:
+node dist/bin.js auth login-browser --no-open
 ```
 
-Priority remains: command-line args > persisted `config set ...` values > `.env` defaults > saved auth target.
+Base URL resolution priority is: command-line arguments > persisted `config set ...` values > `POCKETBASE_CLI_BASE_URL` > stored auth session target.
 
-## Automation
+Only the remote base URL is read from the environment. Login identity and password must come from command arguments, `--password-stdin`, or the local browser form.
 
-- `CI` runs on pushes and pull requests targeting `main`
-- `Release` runs when a `v*.*.*` tag is pushed and publishes a GitHub Release with the packaged `.tgz` artifact
-- `Release` can also be triggered manually for an existing tag through `workflow_dispatch`
+By default the CLI stores config, history, and auth state under `~/.cache/pocketbase-cli`. The persisted session file is encrypted at rest and uses an adjacent `.key` file.
 
-## Language Guides
+## Documentation
 
-- [`English Guide`](README.en.md)
-- [`中文指南`](README.zh-CN.md)
+- [`README.en.md`](README.en.md): full English guide
+- [`README.zh-CN.md`](README.zh-CN.md): 完整中文指南
+- [`FEATURES.md`](FEATURES.md): feature and behavior reference
+- [`DEVELOPMENT.md`](DEVELOPMENT.md): contributor and build guide
+- [`TESTING.md`](TESTING.md): test strategy and validation guide
+- [`CHANGELOG.md`](CHANGELOG.md): release notes

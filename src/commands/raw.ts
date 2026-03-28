@@ -20,7 +20,7 @@ function buildRawHistoryCommand(
   stdinJson?: boolean,
   withAuth?: boolean
 ): string {
-  const parts = ["raw", method.toUpperCase(), path];
+  const parts = ["raw", method.toUpperCase(), sanitizeHistoryPath(path)];
 
   if (filePath === "-") {
     parts.push("--file", "-");
@@ -32,6 +32,17 @@ function buildRawHistoryCommand(
   }
 
   return parts.join(" ");
+}
+
+function sanitizeHistoryPath(path: string): string {
+  const hashIndex = path.indexOf("#");
+  const pathWithoutFragment = hashIndex >= 0 ? path.slice(0, hashIndex) : path;
+  const queryIndex = pathWithoutFragment.indexOf("?");
+  const hasQuery = queryIndex >= 0;
+  const basePath = hasQuery ? pathWithoutFragment.slice(0, queryIndex) : pathWithoutFragment;
+  const hasFragment = hashIndex >= 0;
+
+  return `${basePath}${hasQuery ? "?<redacted>" : ""}${hasFragment ? "#<redacted>" : ""}`;
 }
 
 export function createRawDefinition(context: AppContext): CommandDefinition {

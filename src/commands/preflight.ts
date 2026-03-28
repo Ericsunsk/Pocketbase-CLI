@@ -11,6 +11,7 @@ import type { CommandDefinition } from "../contract/command-registry";
 import { createOptionParameter } from "../contract/metadata";
 import { emitSuccess } from "../core/output";
 import { PocketBaseRemoteClient, PocketBaseRemoteError } from "../http/remote-client";
+import { parseBaseUrlValue } from "../input/validators";
 
 type PreflightStatus = "pass" | "fail" | "skip";
 
@@ -78,7 +79,19 @@ export async function runPreflightCheck(
     skipHealth?: boolean;
   }
 ): Promise<Record<string, unknown>> {
-  const resolvedBaseUrl = resolveBaseUrl(context, options.baseUrl);
+  const rawResolvedBaseUrl = resolveBaseUrl(context, options.baseUrl);
+  let resolvedBaseUrl: string | null = null;
+  let baseUrlValidationError: string | null = null;
+  if (rawResolvedBaseUrl) {
+    try {
+      resolvedBaseUrl = parseBaseUrlValue(
+        options.baseUrl !== undefined ? "--base-url" : "base_url",
+        rawResolvedBaseUrl
+      );
+    } catch (error) {
+      baseUrlValidationError = error instanceof Error ? error.message : String(error);
+    }
+  }
   const resolvedCollection = resolveAuthCollection(context, options.collection);
   const savedAuthBaseUrl = normalizeBaseUrl(context.state.remoteAuth.base_url ?? null);
   const savedAuthCollection = String(context.state.remoteAuth.collection ?? "_superusers");
@@ -105,17 +118,18 @@ export async function runPreflightCheck(
   } else {
     missingPrerequisites.push("base_url");
     recommendations.push(
-      "Set `POCKETBASE_CLI_BASE_URL` in `.env`, run `config set base_url <url>`, or pass `--base-url <url>`."
+      "Run `config set base_url <url>` or pass `--base-url <url>`."
     );
     checks.push(
       createCheck({
         name: "base_url",
         status: "fail",
         required: true,
-        message: "Base URL is missing.",
-        hint:
-          "Set `POCKETBASE_CLI_BASE_URL` in `.env`, run `config set base_url <url>`, or pass `--base-url <url>`.",
-        data: { resolved_base_url: null }
+        message: baseUrlValidationError ?? "Base URL is missing.",
+        hint: baseUrlValidationError
+          ? "Use a valid absolute http:// or https:// URL, for example https://pb.example.com or http://127.0.0.1:8090."
+          : "Run `config set base_url <url>` or pass `--base-url <url>`.",
+        data: { resolved_base_url: rawResolvedBaseUrl ?? null }
       })
     );
   }

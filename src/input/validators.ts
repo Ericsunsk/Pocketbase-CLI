@@ -1,9 +1,8 @@
 export const STATE_DIR_ENV = "POCKETBASE_CLI_STATE_DIR";
 export const BASE_URL_ENV = "POCKETBASE_CLI_BASE_URL";
-export const AUTH_IDENTITY_ENV = "POCKETBASE_CLI_AUTH_IDENTITY";
-export const AUTH_PASSWORD_ENV = "POCKETBASE_CLI_AUTH_PASSWORD";
 export const DEFAULT_STATE_DIR = "~/.cache/pocketbase-cli";
 export const DEFAULT_SESSION_PATH = "session.json";
+const ALLOWED_BASE_URL_PROTOCOLS = new Set(["http:", "https:"]);
 
 export const INT_CONFIG_KEYS = new Set(["timeout"]);
 export const ALLOWED_CONFIG_KEYS = new Set([
@@ -16,6 +15,35 @@ export type ConfigKey = "base_url" | "auth_collection" | "timeout";
 
 export function isConfigKey(value: string): value is ConfigKey {
   return ALLOWED_CONFIG_KEYS.has(value as ConfigKey);
+}
+
+export function parseBaseUrlValue(name: string, raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    throw new Error(`${name} expects a non-empty URL`);
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    throw new Error(`${name} expects an absolute http:// or https:// URL`);
+  }
+
+  if (!ALLOWED_BASE_URL_PROTOCOLS.has(parsed.protocol) || !parsed.hostname) {
+    throw new Error(`${name} expects an absolute http:// or https:// URL`);
+  }
+
+  if (parsed.username || parsed.password) {
+    throw new Error(`${name} must not include embedded credentials`);
+  }
+
+  if (parsed.search || parsed.hash) {
+    throw new Error(`${name} must not include query parameters or fragments`);
+  }
+
+  const pathname = parsed.pathname.replace(/\/+$/u, "");
+  return `${parsed.origin}${pathname === "/" ? "" : pathname}`;
 }
 
 export function parseConfigValue(key: string, raw: string): string | number | null {
@@ -33,7 +61,7 @@ export function parseConfigValue(key: string, raw: string): string | number | nu
   }
 
   if (key === "base_url") {
-    return raw.replace(/\/+$/, "");
+    return parseBaseUrlValue("base_url", raw);
   }
 
   return raw.trim();
@@ -54,32 +82,13 @@ export function readEnvBaseUrl(env: NodeJS.ProcessEnv = process.env): string | n
   return typeof parsed === "string" ? parsed : null;
 }
 
-function readOptionalTrimmedEnv(
-  key: string,
-  env: NodeJS.ProcessEnv = process.env
-): string | null {
-  const raw = env[key];
-  if (typeof raw !== "string") {
-    return null;
-  }
-
-  const trimmed = raw.trim();
-  return trimmed ? trimmed : null;
-}
-
 export function readEnvConfig(env: NodeJS.ProcessEnv = process.env): {
   base_url?: string | null;
-  auth_identity?: string | null;
-  auth_password?: string | null;
 } {
   const baseUrl = readEnvBaseUrl(env);
-  const authIdentity = readOptionalTrimmedEnv(AUTH_IDENTITY_ENV, env);
-  const authPassword = readOptionalTrimmedEnv(AUTH_PASSWORD_ENV, env);
 
   return {
-    ...(baseUrl ? { base_url: baseUrl } : {}),
-    ...(authIdentity ? { auth_identity: authIdentity } : {}),
-    ...(authPassword ? { auth_password: authPassword } : {})
+    ...(baseUrl ? { base_url: baseUrl } : {})
   };
 }
 

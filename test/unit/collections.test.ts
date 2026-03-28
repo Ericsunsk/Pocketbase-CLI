@@ -3,23 +3,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createCollectionsDefinition } from "../../src/commands/collections";
 import { CliExitError } from "../../src/core/output";
 import { PocketBaseRemoteClient } from "../../src/http/remote-client";
-import { SessionState, SessionStore } from "../../src/core/session-store";
+import { buildSubcommand } from "./helpers/command";
+import { makeContext } from "./helpers/context";
 
 function buildContext() {
-  const store = new SessionStore("/tmp/pocketbase-cli-collections-session.json");
-  const state = new SessionState();
-  state.setConfig("base_url", "https://pb.example.com");
-  state.setRemoteAuth({
-    baseUrl: "https://pb.example.com/",
-    token: "token"
+  return makeContext({
+    storePath: "/tmp/pocketbase-cli-collections-session.json",
+    baseUrl: "https://pb.example.com",
+    authed: true
   });
-
-  return {
-    version: "0.1.0",
-    jsonMode: false,
-    store,
-    state
-  };
 }
 
 describe("collections commands", () => {
@@ -56,9 +48,7 @@ describe("collections commands", () => {
         }
       });
 
-    const definition = createCollectionsDefinition(context);
-    const listDefinition = definition.children?.find((child) => child.name === "list");
-    const command = listDefinition?.build?.();
+    const command = buildSubcommand(createCollectionsDefinition(context), "list");
 
     await command?.parseAsync(["node", "list", "--all"]);
 
@@ -82,9 +72,7 @@ describe("collections commands", () => {
         data: {}
       });
 
-    const definition = createCollectionsDefinition(context);
-    const createDefinition = definition.children?.find((child) => child.name === "create");
-    const command = createDefinition?.build?.();
+    const command = buildSubcommand(createCollectionsDefinition(context), "create");
 
     await command?.parseAsync(["node", "create", "--data", '{"name":"posts"}']);
 
@@ -97,9 +85,7 @@ describe("collections commands", () => {
 
   it("requires --yes before deleting a collection", async () => {
     const context = buildContext();
-    const definition = createCollectionsDefinition(context);
-    const deleteDefinition = definition.children?.find((child) => child.name === "delete");
-    const command = deleteDefinition?.build?.();
+    const command = buildSubcommand(createCollectionsDefinition(context), "delete");
 
     await expect(command?.parseAsync(["node", "delete", "posts"])).rejects.toBeInstanceOf(
       CliExitError
@@ -133,9 +119,7 @@ describe("collections commands", () => {
         }
       });
 
-    const definition = createCollectionsDefinition(context);
-    const ensureDefinition = definition.children?.find((child) => child.name === "ensure");
-    const command = ensureDefinition?.build?.();
+    const command = buildSubcommand(createCollectionsDefinition(context), "ensure");
 
     await command?.parseAsync(["node", "ensure", "--data", '{"name":"posts"}', "--output", "summary"]);
 

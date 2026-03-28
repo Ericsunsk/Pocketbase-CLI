@@ -1,3 +1,4 @@
+import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -8,6 +9,12 @@ import {
   DEFAULT_STATE_DIR,
   STATE_DIR_ENV
 } from "../input/validators";
+
+const SESSION_ENCRYPTION_FORMAT = "pocketbase-cli.session.encrypted/v1";
+const SESSION_ENCRYPTION_ALGORITHM = "aes-256-gcm";
+const SESSION_ENCRYPTION_KEY_BYTES = 32;
+const SESSION_ENCRYPTION_IV_BYTES = 12;
+const SESSION_ENCRYPTION_TAG_BYTES = 16;
 
 export interface RemoteAuthState {
   base_url?: string;
@@ -30,8 +37,102 @@ export interface SessionSnapshot {
   redo_stack: Array<Record<string, unknown>>;
 }
 
+interface EncryptedSessionEnvelope {
+  format: string;
+  algorithm: string;
+  iv: string;
+  tag: string;
+  ciphertext: string;
+}
+
 function expandHomePath(value: string): string {
   return value.startsWith("~/") ? join(homedir(), value.slice(2)) : value;
+}
+
+function isEncryptedSessionEnvelope(value: unknown): value is EncryptedSessionEnvelope {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  return (
+    value.format === SESSION_ENCRYPTION_FORMAT &&
+    typeof value.algorithm === "string" &&
+    typeof value.iv === "string" &&
+    typeof value.tag === "string" &&
+    typeof value.ciphertext === "string"
+  );
+}
+
+function decodeBase64Field(name: string, value: string, expectedLength?: number): Buffer {
+  const decoded = Buffer.from(value, "base64");
+  if (decoded.length === 0 || (expectedLength !== undefined && decoded.length !== expectedLength)) {
+    throw new Error(`Invalid ${name} in encrypted session state.`);
+  }
+
+  return decoded;
+}
+
+function encryptSessionSnapshot(snapshot: SessionSnapshot, key: Buffer): EncryptedSessionEnvelope {
+  const iv = randomBytes(SESSION_ENCRYPTION_IV_BYTES);
+  const cipher = createCipheriv(SESSION_ENCRYPTION_ALGORITHM, key, iv);
+  const plaintext = Buffer.from(JSON.stringify(snapshot), "utf8");
+  const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
+  const tag = cipher.getAuthTag();
+
+  return {
+    format: SESSION_ENCRYPTION_FORMAT,
+    algorithm: SESSION_ENCRYPTION_ALGORITHM,
+    iv: iv.toString("base64"),
+    tag: tag.toString("base64"),
+    ciphertext: ciphertext.toString("base64")
+  };
+}
+
+function decryptSessionEnvelope(path: string, envelope: EncryptedSessionEnvelope, key: Buffer): SessionState {
+  if (envelope.algorithm !== SESSION_ENCRYPTION_ALGORITHM) {
+    throw new Error(
+      `Failed to decrypt session state at ${path}. Unsupported encryption algorithm: ${envelope.algorithm}.`
+    );
+  }
+
+  try {
+    const iv = decodeBase64Field("IV", envelope.iv, SESSION_ENCRYPTION_IV_BYTES);
+    const tag = decodeBase64Field("auth tag", envelope.tag, SESSION_ENCRYPTION_TAG_BYTES);
+    const ciphertext = decodeBase64Field("ciphertext", envelope.ciphertext);
+    const decipher = createDecipheriv(SESSION_ENCRYPTION_ALGORITHM, key, iv);
+    decipher.setAuthTag(tag);
+
+    const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
+    const payload = JSON.parse(plaintext) as unknown;
+    return isRecord(payload) ? SessionState.fromJSON(payload) : new SessionState();
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      throw new Error(`Failed to parse decrypted session state at ${path}.`);
+    }
+
+    throw new Error(
+      `Failed to decrypt session state at ${path}. ` +
+        `Delete both the session file and its key file if you want to start with a clean state.`
+    );
+  }
+}
+
+async function writePrivateFileAtomic(path: string, data: string): Promise<void> {
+  await mkdir(dirname(path), { recursive: true });
+
+  const tempPath = `${path}.tmp-${process.pid}-${Date.now()}`;
+  await writeFile(tempPath, data, {
+    encoding: "utf8",
+    mode: 0o600
+  });
+
+  await rename(tempPath, path);
+
+  try {
+    await chmod(path, 0o600);
+  } catch {
+    // Keep best-effort parity across platforms without failing the write.
+  }
 }
 
 export class SessionState {
@@ -212,18 +313,29 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 export class SessionStore {
   public readonly path: string;
+  public readonly keyPath: string;
 
   public constructor(path?: string) {
     const configuredDir = process.env[STATE_DIR_ENV];
     const baseDir = expandHomePath(configuredDir ?? DEFAULT_STATE_DIR);
     this.path = path ?? join(baseDir, DEFAULT_SESSION_PATH);
+    this.keyPath = `${this.path}.key`;
   }
 
   public async load(): Promise<SessionState> {
     try {
       const raw = await readFile(this.path, "utf8");
       const payload = JSON.parse(raw) as unknown;
-      return isRecord(payload) ? SessionState.fromJSON(payload) : new SessionState();
+      if (!isRecord(payload)) {
+        return new SessionState();
+      }
+
+      if (isEncryptedSessionEnvelope(payload)) {
+        const key = await this.loadEncryptionKey(false);
+        return decryptSessionEnvelope(this.path, payload, key);
+      }
+
+      return SessionState.fromJSON(payload);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
         return new SessionState();
@@ -238,20 +350,29 @@ export class SessionStore {
   }
 
   public async save(state: SessionState): Promise<void> {
-    await mkdir(dirname(this.path), { recursive: true });
+    const key = await this.loadEncryptionKey(true);
+    const encrypted = encryptSessionSnapshot(state.toJSON(), key);
+    await writePrivateFileAtomic(this.path, JSON.stringify(encrypted, null, 2));
+  }
 
-    const tempPath = `${this.path}.tmp-${process.pid}-${Date.now()}`;
-    await writeFile(tempPath, JSON.stringify(state.toJSON(), null, 2), {
-      encoding: "utf8",
-      mode: 0o600
-    });
-
-    await rename(tempPath, this.path);
-
+  private async loadEncryptionKey(createIfMissing: boolean): Promise<Buffer> {
     try {
-      await chmod(this.path, 0o600);
-    } catch {
-      // Keep best-effort parity with Python implementation without failing the write.
+      const raw = (await readFile(this.keyPath, "utf8")).trim();
+      return decodeBase64Field("encryption key", raw, SESSION_ENCRYPTION_KEY_BYTES);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        throw error;
+      }
+
+      if (!createIfMissing) {
+        throw new Error(
+          `Failed to decrypt session state at ${this.path}. Missing encryption key at ${this.keyPath}.`
+        );
+      }
     }
+
+    const key = randomBytes(SESSION_ENCRYPTION_KEY_BYTES);
+    await writePrivateFileAtomic(this.keyPath, key.toString("base64"));
+    return key;
   }
 }

@@ -3,23 +3,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createFilesDefinition } from "../../src/commands/files";
 import { CliExitError } from "../../src/core/output";
 import { PocketBaseRemoteClient } from "../../src/http/remote-client";
-import { SessionState, SessionStore } from "../../src/core/session-store";
+import { buildSubcommand } from "./helpers/command";
+import { makeContext } from "./helpers/context";
 
 function buildContext() {
-  const store = new SessionStore("/tmp/pocketbase-cli-files-session.json");
-  const state = new SessionState();
-  state.setConfig("base_url", "https://pb.example.com");
-  state.setRemoteAuth({
-    baseUrl: "https://pb.example.com/",
-    token: "token"
+  return makeContext({
+    storePath: "/tmp/pocketbase-cli-files-session.json",
+    baseUrl: "https://pb.example.com",
+    authed: true
   });
-
-  return {
-    version: "0.1.0",
-    jsonMode: false,
-    store,
-    state
-  };
 }
 
 describe("files commands", () => {
@@ -31,9 +23,7 @@ describe("files commands", () => {
     const context = buildContext();
     const spy = vi.spyOn(PocketBaseRemoteClient.prototype, "filesToken");
 
-    const definition = createFilesDefinition(context);
-    const urlDefinition = definition.children?.find((child) => child.name === "url");
-    const command = urlDefinition?.build?.();
+    const command = buildSubcommand(createFilesDefinition(context), "url");
 
     await command?.parseAsync([
       "node",
@@ -62,9 +52,7 @@ describe("files commands", () => {
       }
     });
 
-    const definition = createFilesDefinition(context);
-    const urlDefinition = definition.children?.find((child) => child.name === "url");
-    const command = urlDefinition?.build?.();
+    const command = buildSubcommand(createFilesDefinition(context), "url");
 
     await command?.parseAsync(["node", "url", "users", "rec1", "avatar.png", "--with-token"]);
 
@@ -76,9 +64,7 @@ describe("files commands", () => {
 
   it("rejects combining --token and --with-token", async () => {
     const context = buildContext();
-    const definition = createFilesDefinition(context);
-    const urlDefinition = definition.children?.find((child) => child.name === "url");
-    const command = urlDefinition?.build?.();
+    const command = buildSubcommand(createFilesDefinition(context), "url");
 
     await expect(
       command?.parseAsync([

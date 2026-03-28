@@ -3,8 +3,6 @@ import { readEnvConfig } from "../input/validators";
 
 export interface EnvConfig {
   base_url?: string | null;
-  auth_identity?: string | null;
-  auth_password?: string | null;
 }
 
 export interface AppContext {
@@ -127,8 +125,6 @@ export function buildAuthStatusPayload(context: AppContext): Record<string, unkn
     authenticated: context.state.hasRemoteAuth(),
     configured_base_url: context.state.config.base_url ?? null,
     env_base_url: context.envConfig?.base_url ?? null,
-    env_auth_identity: context.envConfig?.auth_identity ?? null,
-    env_auth_password_present: Boolean(context.envConfig?.auth_password),
     resolved_base_url: resolveBaseUrl(context),
     configured_auth_collection: context.state.config.auth_collection ?? "_superusers",
     active_base_url: remoteAuth.base_url ?? null,

@@ -49,6 +49,25 @@ export class PocketBaseRemoteError extends Error {
 
 type QueryValue = string | number | boolean | null | undefined;
 
+interface RequestOptions {
+  body?: BodyInit;
+  query?: Record<string, QueryValue>;
+  requireAuth?: boolean;
+  includeAuth?: boolean;
+  allowedStatuses?: Set<number>;
+  headers?: Record<string, string>;
+}
+
+interface RequestExecutionOptions extends RequestOptions {
+  accept: string;
+}
+
+interface ParsedResponse<TData> {
+  data: TData;
+  errorData: unknown;
+  errorMessage: string;
+}
+
 function quotePathSegment(value: string): string {
   return encodeURIComponent(value);
 }
@@ -349,12 +368,7 @@ export class PocketBaseRemoteClient {
     sort?: string | null;
   }): Promise<RemoteResult<Record<string, unknown>>> {
     return this.request("GET", "/api/collections", {
-      query: {
-        page: options?.page,
-        perPage: options?.perPage,
-        filter: options?.filterValue ?? undefined,
-        sort: options?.sort ?? undefined
-      },
+      query: this.listQuery(options),
       requireAuth: true
     });
   }
@@ -460,12 +474,7 @@ export class PocketBaseRemoteClient {
     sort?: string | null;
   }): Promise<RemoteResult<Record<string, unknown>>> {
     return this.request("GET", "/api/logs", {
-      query: {
-        page: options?.page,
-        perPage: options?.perPage,
-        filter: options?.filterValue ?? undefined,
-        sort: options?.sort ?? undefined
-      },
+      query: this.listQuery(options),
       requireAuth: true
     });
   }
@@ -510,10 +519,7 @@ export class PocketBaseRemoteClient {
   }): Promise<RemoteResult<Record<string, unknown>>> {
     return this.request("GET", this.collectionPath(options.collection, "records"), {
       query: {
-        page: options.page,
-        perPage: options.perPage,
-        filter: options.filterValue ?? undefined,
-        sort: options.sort ?? undefined,
+        ...this.listQuery(options),
         ...this.recordQuery(options.fields, options.expand)
       },
       requireAuth: true
@@ -754,6 +760,20 @@ export class PocketBaseRemoteClient {
     };
   }
 
+  private listQuery(options?: {
+    page?: number;
+    perPage?: number;
+    filterValue?: string | null;
+    sort?: string | null;
+  }): Record<string, QueryValue> {
+    return {
+      page: options?.page,
+      perPage: options?.perPage,
+      filter: options?.filterValue ?? undefined,
+      sort: options?.sort ?? undefined
+    };
+  }
+
   private async buildMultipartFormData(options: {
     body: Record<string, unknown>;
     fileFields: Array<{ fieldName: string; filePath: string }>;
@@ -801,29 +821,42 @@ export class PocketBaseRemoteClient {
     });
   }
 
-  private async executeRequest(
+  private createMissingAuthError(method: string, url: string): PocketBaseRemoteError {
+    return new PocketBaseRemoteError({
+      method,
+      url,
+      status: 401,
+      message: AUTH_TOKEN_MISSING_MESSAGE,
+      data: {}
+    });
+  }
+
+  private wrapUnknownRequestError(
+    method: string,
+    url: string,
+    error: unknown
+  ): PocketBaseRemoteError {
+    const message = error instanceof Error ? error.message : String(error);
+    return new PocketBaseRemoteError({
+      method,
+      url,
+      status: 0,
+      message,
+      data: {}
+    });
+  }
+
+  private async executeRequest<TData>(
     method: string,
     path: string,
-    options: {
-      body?: BodyInit;
-      query?: Record<string, QueryValue>;
-      requireAuth: boolean;
-      includeAuth: boolean;
-      allowedStatuses?: Set<number>;
-      accept: string;
-      headers?: Record<string, string>;
-    }
-  ): Promise<{ url: string; status: number; responseText: string }> {
+    options: RequestExecutionOptions,
+    parseResponse: (response: Response) => Promise<ParsedResponse<TData>>
+  ): Promise<{ method: string; url: string; status: number; data: TData }> {
+    const normalizedMethod = method.toUpperCase();
     const url = this.buildUrl(path, options.query);
 
-    if (options.requireAuth && !this.token) {
-      throw new PocketBaseRemoteError({
-        method: method.toUpperCase(),
-        url,
-        status: 401,
-        message: AUTH_TOKEN_MISSING_MESSAGE,
-        data: {}
-      });
+    if ((options.requireAuth ?? false) && !this.token) {
+      throw this.createMissingAuthError(normalizedMethod, url);
     }
 
     const headers: Record<string, string> = {
@@ -831,7 +864,8 @@ export class PocketBaseRemoteClient {
       "User-Agent": this.userAgent,
       ...(options.headers ?? {})
     };
-    if (options.includeAuth && this.token) {
+    const includeAuth = options.includeAuth ?? options.requireAuth ?? false;
+    if (includeAuth && this.token) {
       headers.Authorization = this.token;
     }
 
@@ -843,42 +877,35 @@ export class PocketBaseRemoteClient {
 
     try {
       const response = await fetch(url, {
-        method: method.toUpperCase(),
+        method: normalizedMethod,
         headers,
         body: options.body,
         signal: controller.signal
       });
-      const responseText = await response.text();
+      const parsed = await parseResponse(response);
 
       if (!response.ok && !options.allowedStatuses?.has(response.status)) {
-        const payload = decodeJson(responseText);
         throw new PocketBaseRemoteError({
-          method: method.toUpperCase(),
+          method: normalizedMethod,
           url,
           status: response.status,
-          message: extractErrorMessage(payload, responseText, response.statusText),
-          data: payload
+          message: parsed.errorMessage,
+          data: parsed.errorData
         });
       }
 
       return {
+        method: normalizedMethod,
         url,
         status: response.status,
-        responseText
+        data: parsed.data
       };
     } catch (error) {
       if (error instanceof PocketBaseRemoteError) {
         throw error;
       }
 
-      const message = error instanceof Error ? error.message : String(error);
-      throw new PocketBaseRemoteError({
-        method: method.toUpperCase(),
-        url,
-        status: 0,
-        message,
-        data: {}
-      });
+      throw this.wrapUnknownRequestError(normalizedMethod, url, error);
     } finally {
       if (timeoutHandle) {
         clearTimeout(timeoutHandle);
@@ -889,117 +916,45 @@ export class PocketBaseRemoteClient {
   private async requestBytes(
     method: string,
     path: string,
-    options?: {
-      body?: BodyInit;
-      query?: Record<string, QueryValue>;
-      requireAuth?: boolean;
-      includeAuth?: boolean;
-      allowedStatuses?: Set<number>;
-      headers?: Record<string, string>;
-    }
+    options?: RequestOptions
   ): Promise<RemoteBytesResult> {
-    const url = this.buildUrl(path, options?.query);
-
-    if (options?.requireAuth && !this.token) {
-      throw new PocketBaseRemoteError({
-        method: method.toUpperCase(),
-        url,
-        status: 401,
-        message: AUTH_TOKEN_MISSING_MESSAGE,
-        data: {}
-      });
-    }
-
-    const headers: Record<string, string> = {
-      Accept: "*/*",
-      "User-Agent": this.userAgent,
-      ...(options?.headers ?? {})
-    };
-    if ((options?.includeAuth ?? options?.requireAuth ?? false) && this.token) {
-      headers.Authorization = this.token;
-    }
-
-    const controller = new AbortController();
-    const timeoutHandle =
-      this.timeout !== null
-        ? setTimeout(() => controller.abort(), this.timeout * 1000)
-        : null;
-
-    try {
-      const response = await fetch(url, {
-        method: method.toUpperCase(),
-        headers,
-        body: options?.body,
-        signal: controller.signal
-      });
-
-      const data = new Uint8Array(await response.arrayBuffer());
-
-      if (!response.ok && !options?.allowedStatuses?.has(response.status)) {
+    return this.executeRequest(
+      method,
+      path,
+      { ...options, accept: "*/*" },
+      async (response) => {
+        const data = new Uint8Array(await response.arrayBuffer());
         const responseText = new TextDecoder().decode(data);
-        const payload = decodeJson(responseText);
-        throw new PocketBaseRemoteError({
-          method: method.toUpperCase(),
-          url,
-          status: response.status,
-          message: extractErrorMessage(payload, responseText, response.statusText),
-          data: payload
-        });
-      }
+        const errorData = decodeJson(responseText);
 
-      return {
-        method: method.toUpperCase(),
-        url,
-        status: response.status,
-        data
-      };
-    } catch (error) {
-      if (error instanceof PocketBaseRemoteError) {
-        throw error;
+        return {
+          data,
+          errorData,
+          errorMessage: extractErrorMessage(errorData, responseText, response.statusText)
+        };
       }
-
-      const message = error instanceof Error ? error.message : String(error);
-      throw new PocketBaseRemoteError({
-        method: method.toUpperCase(),
-        url,
-        status: 0,
-        message,
-        data: {}
-      });
-    } finally {
-      if (timeoutHandle) {
-        clearTimeout(timeoutHandle);
-      }
-    }
+    );
   }
 
   private async requestBody<TData = unknown>(
     method: string,
     path: string,
-    options?: {
-      body?: BodyInit;
-      query?: Record<string, QueryValue>;
-      requireAuth?: boolean;
-      includeAuth?: boolean;
-      allowedStatuses?: Set<number>;
-      headers?: Record<string, string>;
-    }
+    options?: RequestOptions
   ): Promise<RemoteResult<TData>> {
-    const { url, responseText, status } = await this.executeRequest(method, path, {
-      body: options?.body,
-      query: options?.query,
-      requireAuth: options?.requireAuth ?? false,
-      includeAuth: options?.includeAuth ?? options?.requireAuth ?? false,
-      allowedStatuses: options?.allowedStatuses,
-      accept: "application/json",
-      headers: options?.headers
-    });
+    return this.executeRequest(
+      method,
+      path,
+      { ...options, accept: "application/json" },
+      async (response) => {
+        const responseText = await response.text();
+        const data = decodeJson(responseText) as TData;
 
-    return {
-      method: method.toUpperCase(),
-      url,
-      status,
-      data: decodeJson(responseText) as TData
-    };
+        return {
+          data,
+          errorData: data,
+          errorMessage: extractErrorMessage(data, responseText, response.statusText)
+        };
+      }
+    );
   }
 }

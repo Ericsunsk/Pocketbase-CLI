@@ -1,7 +1,8 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { createCli } from "../../src/cli";
-import { SessionState, SessionStore } from "../../src/core/session-store";
+import { makeContext } from "./helpers/context";
+import { captureStdout } from "./helpers/output";
 
 function createContext(options?: {
   baseUrl?: string;
@@ -9,41 +10,22 @@ function createContext(options?: {
   authBaseUrl?: string;
   authCollection?: string;
 }) {
-  const state = new SessionState();
-
-  if (options?.baseUrl) {
-    state.setConfig("base_url", options.baseUrl);
-  }
-
-  if (options?.authBaseUrl) {
-    state.setRemoteAuth({
-      baseUrl: options.authBaseUrl,
-      token: "secret-token",
-      collection: options.authCollection ?? "_superusers"
-    });
-  }
-
-  return {
-    version: "0.1.0",
+  return makeContext({
+    storePath: "/tmp/pocketbase-cli-preflight-test-session.json",
     jsonMode: true,
-    envConfig: options?.envBaseUrl ? { base_url: options.envBaseUrl } : {},
-    suppressHistory: false,
-    onStateSaved: undefined,
-    store: new SessionStore("/tmp/pocketbase-cli-preflight-test-session.json"),
-    state
-  };
+    baseUrl: options?.baseUrl,
+    envBaseUrl: options?.envBaseUrl,
+    authed: Boolean(options?.authBaseUrl),
+    authBaseUrl: options?.authBaseUrl,
+    authCollection: options?.authBaseUrl ? (options.authCollection ?? "_superusers") : undefined
+  });
 }
 
 describe("preflight command", () => {
   it("reports missing prerequisites without mutating state", async () => {
     const context = createContext();
     const cli = createCli(context);
-    const writes: string[] = [];
-
-    vi.spyOn(process.stdout, "write").mockImplementation((chunk: string | Uint8Array) => {
-      writes.push(String(chunk));
-      return true;
-    });
+    const stdout = captureStdout();
 
     try {
       await cli.parseAsync([
@@ -55,10 +37,10 @@ describe("preflight command", () => {
         "--skip-health"
       ]);
     } finally {
-      vi.restoreAllMocks();
+      stdout.restore();
     }
 
-    const payload = JSON.parse(writes.join("").trim()) as {
+    const payload = JSON.parse(stdout.output.join("").trim()) as {
       message: string;
       result: {
         ready: boolean;
@@ -85,12 +67,7 @@ describe("preflight command", () => {
       authBaseUrl: "https://pb.example.com"
     });
     const cli = createCli(context);
-    const writes: string[] = [];
-
-    vi.spyOn(process.stdout, "write").mockImplementation((chunk: string | Uint8Array) => {
-      writes.push(String(chunk));
-      return true;
-    });
+    const stdout = captureStdout();
 
     try {
       await cli.parseAsync([
@@ -102,10 +79,10 @@ describe("preflight command", () => {
         "--skip-health"
       ]);
     } finally {
-      vi.restoreAllMocks();
+      stdout.restore();
     }
 
-    const payload = JSON.parse(writes.join("").trim()) as {
+    const payload = JSON.parse(stdout.output.join("").trim()) as {
       message: string;
       result: {
         ready: boolean;
@@ -131,12 +108,7 @@ describe("preflight command", () => {
       authBaseUrl: "https://pb.example.com"
     });
     const cli = createCli(context);
-    const writes: string[] = [];
-
-    vi.spyOn(process.stdout, "write").mockImplementation((chunk: string | Uint8Array) => {
-      writes.push(String(chunk));
-      return true;
-    });
+    const stdout = captureStdout();
 
     try {
       await cli.parseAsync([
@@ -148,10 +120,10 @@ describe("preflight command", () => {
         "--skip-health"
       ]);
     } finally {
-      vi.restoreAllMocks();
+      stdout.restore();
     }
 
-    const payload = JSON.parse(writes.join("").trim()) as {
+    const payload = JSON.parse(stdout.output.join("").trim()) as {
       message: string;
       result: {
         ready: boolean;

@@ -3,58 +3,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createCli } from "../../src/cli";
 import { createAppContext } from "../../src/app/context";
 import { CliExitError } from "../../src/core/output";
-import { PocketBaseRemoteClient } from "../../src/http/remote-client";
+import { PocketBaseRemoteClient, PocketBaseRemoteError } from "../../src/http/remote-client";
+import { captureStderr, captureStdout } from "./helpers/output";
 
 const REAL_FETCH = globalThis.fetch;
-
-function captureStdout(): {
-  output: string[];
-  restore: () => void;
-} {
-  const output: string[] = [];
-  const original = process.stdout.write.bind(process.stdout);
-
-  vi.spyOn(process.stdout, "write").mockImplementation((chunk: string | Uint8Array) => {
-    output.push(String(chunk));
-    return true;
-  });
-
-  return {
-    output,
-    restore: () => {
-      (process.stdout.write as unknown as ReturnType<typeof vi.spyOn>).mockRestore?.();
-      process.stdout.write = original as typeof process.stdout.write;
-    }
-  };
-}
-
-function captureStderr(): {
-  output: string[];
-  restore: () => void;
-} {
-  const output: string[] = [];
-  const original = process.stderr.write.bind(process.stderr);
-
-  vi.spyOn(process.stderr, "write").mockImplementation((chunk: string | Uint8Array) => {
-    output.push(String(chunk));
-    return true;
-  });
-
-  return {
-    output,
-    restore: () => {
-      (process.stderr.write as unknown as ReturnType<typeof vi.spyOn>).mockRestore?.();
-      process.stderr.write = original as typeof process.stderr.write;
-    }
-  };
-}
 
 describe("auth commands", () => {
   beforeEach(() => {
     process.env.POCKETBASE_CLI_STATE_DIR = "/tmp/pocketbase-cli-auth-tests";
     delete process.env.POCKETBASE_CLI_BASE_URL;
-    delete process.env.POCKETBASE_CLI_AUTH_IDENTITY;
-    delete process.env.POCKETBASE_CLI_AUTH_PASSWORD;
     if (REAL_FETCH) {
       globalThis.fetch = REAL_FETCH;
     }
@@ -128,6 +85,46 @@ describe("auth commands", () => {
     });
     expect(capture.output.join("")).not.toContain("secret-token");
     expect(capture.output.join("")).toContain("********");
+  });
+
+  it("accepts explicit http base URLs for auth login", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      text: async () =>
+        JSON.stringify({
+          token: "secret-token",
+          record: { id: "superuser_1", email: "admin@example.com" }
+        })
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const context = await createAppContext();
+    const cli = createCli(context);
+    const capture = captureStdout();
+
+    try {
+      await cli.parseAsync([
+        "node",
+        "pocketbase-cli",
+        "--json",
+        "auth",
+        "login",
+        "--base-url",
+        "http://127.0.0.1:8090/pocketbase/",
+        "admin@example.com",
+        "Secret123"
+      ]);
+    } finally {
+      capture.restore();
+    }
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
+      "http://127.0.0.1:8090/pocketbase/api/collections/_superusers/auth-with-password"
+    );
+    expect(context.state.remoteAuth.base_url).toBe("http://127.0.0.1:8090/pocketbase");
   });
 
   it("redacts password-stdin login history without persisting the flag", async () => {
@@ -274,61 +271,45 @@ describe("auth commands", () => {
     capture.restore();
   });
 
-  it("logs in with env-provided target and credentials", async () => {
+  it("auth login rejects invalid explicit base URLs", async () => {
+    const context = await createAppContext();
+    const cli = createCli(context);
+    const capture = captureStdout();
+
+    await expect(
+      cli.parseAsync([
+        "node",
+        "pocketbase-cli",
+        "--json",
+        "auth",
+        "login",
+        "--base-url",
+        "ftp://pb.example.com",
+        "admin@example.com",
+        "Secret123"
+      ])
+    ).rejects.toBeInstanceOf(CliExitError);
+
+    capture.restore();
+  });
+
+  it("does not use env-provided credentials for auth login", async () => {
     process.env.POCKETBASE_CLI_BASE_URL = "https://pb.example.com";
-    process.env.POCKETBASE_CLI_AUTH_IDENTITY = "admin@example.com";
-    process.env.POCKETBASE_CLI_AUTH_PASSWORD = "Secret123";
-
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockImplementation(async (input: string | URL | Request) => {
-        const url = String(input);
-        if (url.includes("/api/health")) {
-          return {
-            ok: true,
-            status: 200,
-            statusText: "OK",
-            text: async () =>
-              JSON.stringify({
-                message: "API is healthy.",
-                code: 200,
-                data: {}
-              })
-          };
-        }
-
-        return {
-          ok: true,
-          status: 200,
-          statusText: "OK",
-          text: async () =>
-            JSON.stringify({
-              token: "secret-token",
-              record: { id: "superuser_1", email: "admin@example.com" }
-            })
-        };
-      })
-    );
 
     const context = await createAppContext();
     const cli = createCli(context);
     const capture = captureStdout();
 
-    try {
-      await cli.parseAsync(["node", "pocketbase-cli", "--json", "auth", "login"]);
-    } finally {
-      capture.restore();
-    }
+    await expect(
+      cli.parseAsync(["node", "pocketbase-cli", "--json", "auth", "login"])
+    ).rejects.toBeInstanceOf(CliExitError);
 
-    expect(context.state.hasRemoteAuth()).toBe(true);
-    expect(context.state.remoteAuth.base_url).toBe("https://pb.example.com");
-    expect(context.state.remoteAuth.collection).toBe("_superusers");
-    expect(context.state.commandHistory.at(-1)).toBe("auth login admin@example.com ********");
+    capture.restore();
+    expect(context.state.hasRemoteAuth()).toBe(false);
   });
 
   it("serves a browser login page and persists auth state after form submit", async () => {
     process.env.POCKETBASE_CLI_BASE_URL = "https://pb.example.com";
-    process.env.POCKETBASE_CLI_AUTH_IDENTITY = "admin@example.com";
 
     vi.spyOn(PocketBaseRemoteClient.prototype, "login").mockResolvedValue({
       method: "POST",
@@ -391,6 +372,7 @@ describe("auth commands", () => {
         },
         body: new URLSearchParams({
           state: String(stateMatch?.[1]),
+          baseUrl: "https://pb.example.com",
           identity: "admin@example.com",
           password: "Secret123"
         })
@@ -425,5 +407,98 @@ describe("auth commands", () => {
     expect(payload.message).toBe("Remote auth login successful and preflight passed");
     expect(payload.data.auth.data.token).toBe("********");
     expect(payload.data.preflight.ready).toBe(true);
+  });
+
+  it("reports browser login success without claiming preflight passed when health fails", async () => {
+    process.env.POCKETBASE_CLI_BASE_URL = "https://pb.example.com";
+
+    vi.spyOn(PocketBaseRemoteClient.prototype, "login").mockResolvedValue({
+      method: "POST",
+      url: "https://pb.example.com/api/collections/_superusers/auth-with-password",
+      status: 200,
+      data: {
+        token: "secret-token",
+        record: { id: "superuser_1", email: "admin@example.com" }
+      }
+    });
+    vi.spyOn(PocketBaseRemoteClient.prototype, "raw").mockRejectedValue(
+      new PocketBaseRemoteError({
+        method: "GET",
+        url: "https://pb.example.com/api/health",
+        status: 503,
+        message: "health probe failed",
+        data: {}
+      })
+    );
+
+    const context = await createAppContext();
+    const cli = createCli(context);
+    const stdout = captureStdout();
+    const stderr = captureStderr();
+
+    try {
+      const commandPromise = cli.parseAsync([
+        "node",
+        "pocketbase-cli",
+        "--json",
+        "auth",
+        "login-browser",
+        "--no-open",
+        "--timeout",
+        "5"
+      ]);
+
+      let launchUrl: string | null = null;
+      for (let attempt = 0; attempt < 50 && !launchUrl; attempt += 1) {
+        const combined = stderr.output.join("");
+        const match = combined.match(/http:\/\/127\.0\.0\.1:\d+\/login\/[a-f0-9]+/u);
+        launchUrl = match?.[0] ?? null;
+        if (!launchUrl) {
+          await new Promise((resolve) => setTimeout(resolve, 20));
+        }
+      }
+
+      expect(launchUrl).toBeTruthy();
+
+      const formPage = await fetch(String(launchUrl));
+      const html = await formPage.text();
+      const stateMatch = html.match(/name="state" value="([^"]+)"/u);
+      expect(stateMatch?.[1]).toBeTruthy();
+
+      const response = await fetch(String(launchUrl), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: new URLSearchParams({
+          state: String(stateMatch?.[1]),
+          baseUrl: "https://pb.example.com",
+          identity: "admin@example.com",
+          password: "Secret123"
+        })
+      });
+
+      expect(response.status).toBe(200);
+      await commandPromise;
+    } finally {
+      stdout.restore();
+      stderr.restore();
+    }
+
+    const payload = JSON.parse(stdout.output.join("").trim()) as {
+      message: string;
+      data: {
+        preflight: {
+          ready: boolean;
+          health: {
+            status: string;
+          };
+        };
+      };
+    };
+
+    expect(payload.message).toBe("Remote auth login successful but preflight reported issues");
+    expect(payload.data.preflight.ready).toBe(false);
+    expect(payload.data.preflight.health.status).toBe("fail");
   });
 });

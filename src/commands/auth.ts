@@ -117,8 +117,7 @@ function createAuthLoginDefinition(context: AppContext): CommandDefinition {
               message: LOGIN_BASE_URL_REQUIRED_MESSAGE
             });
 
-            const trimmedIdentity =
-              identity?.trim() || context.envConfig?.auth_identity?.trim() || undefined;
+            const trimmedIdentity = identity?.trim() || undefined;
             if (!trimmedIdentity) {
               emitError({
                 jsonOutput: context.jsonMode,
@@ -126,11 +125,11 @@ function createAuthLoginDefinition(context: AppContext): CommandDefinition {
                 message: "auth login requires an identity (for example admin@example.com).",
                 errorType: "invalid_input",
                 hint:
-                  "Use `auth login <identity> --password-stdin`, set `POCKETBASE_CLI_AUTH_IDENTITY` in `.env`, or run `auth login` for interactive prompts."
+                  "Use `auth login <identity> --password-stdin` or pass the password as the second argument."
               });
             }
 
-            let resolvedPassword = password ?? context.envConfig?.auth_password ?? undefined;
+            let resolvedPassword = password ?? undefined;
             if (options.passwordStdin) {
               if (password !== undefined) {
                 emitError({
@@ -158,7 +157,7 @@ function createAuthLoginDefinition(context: AppContext): CommandDefinition {
                 message: "auth login requires a password argument or `--password-stdin`.",
                 errorType: "invalid_input",
                 hint:
-                  "Use `auth login <identity> --password-stdin`, set `POCKETBASE_CLI_AUTH_PASSWORD` in `.env`, or run `auth login` for interactive prompts."
+                  "Use `auth login <identity> --password-stdin` or pass the password as the second argument."
               });
             }
 

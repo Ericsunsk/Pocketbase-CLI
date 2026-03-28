@@ -3,23 +3,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createBatchDefinition } from "../../src/commands/batch";
 import { CliExitError } from "../../src/core/output";
 import { PocketBaseRemoteClient } from "../../src/http/remote-client";
-import { SessionState, SessionStore } from "../../src/core/session-store";
+import { buildSubcommand } from "./helpers/command";
+import { makeContext } from "./helpers/context";
 
 function buildContext() {
-  const store = new SessionStore("/tmp/pocketbase-cli-batch-session.json");
-  const state = new SessionState();
-  state.setConfig("base_url", "https://pb.example.com");
-  state.setRemoteAuth({
-    baseUrl: "https://pb.example.com/",
-    token: "token"
+  return makeContext({
+    storePath: "/tmp/pocketbase-cli-batch-session.json",
+    baseUrl: "https://pb.example.com",
+    authed: true
   });
-
-  return {
-    version: "0.1.0",
-    jsonMode: false,
-    store,
-    state
-  };
 }
 
 describe("batch commands", () => {
@@ -36,9 +28,7 @@ describe("batch commands", () => {
       data: {}
     });
 
-    const definition = createBatchDefinition(context);
-    const runDefinition = definition.children?.find((child) => child.name === "run");
-    const command = runDefinition?.build?.();
+    const command = buildSubcommand(createBatchDefinition(context), "run");
 
     await command?.parseAsync([
       "node",
@@ -66,9 +56,7 @@ describe("batch commands", () => {
     const context = buildContext();
     const spy = vi.spyOn(PocketBaseRemoteClient.prototype, "batchRun");
 
-    const definition = createBatchDefinition(context);
-    const runDefinition = definition.children?.find((child) => child.name === "run");
-    const command = runDefinition?.build?.();
+    const command = buildSubcommand(createBatchDefinition(context), "run");
 
     await expect(
       command?.parseAsync([

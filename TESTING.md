@@ -1,55 +1,71 @@
-# Testing
+# Testing Guide
 
-## Coverage
+This document summarizes the automated validation strategy for PocketBase CLI and the standard commands used to verify a release candidate locally.
 
-- Installed CLI command discoverability (`pocketbase-cli`)
-- `--help` reflects the remote-only command surface
-- `schema --json` and `schema <command> --json` discoverability
-- `schema collections ensure --json` exposes ensure policy options
-- `schema collections ensure --json` exposes ensure output options
-- `schema raw --json` exposes parameter help, conflicts, examples, and `input_schema`
-- JSON output shape for `info`
-- JSON error envelope shape with `meta` and structured `error`
-- JSON success envelope keeps decoded business payload in `result`
-- JSON output shape for `history`
-- JSON REPL stream remains parseable without prompt pollution
-- JSON REPL built-ins reuse the same envelope shape as one-shot CLI commands
-- `preflight --require-auth --skip-health` reports missing prerequisites without mutating state
-- `preflight --require-auth --skip-health` passes when config and saved auth match
-- REPL history redacts explicit `files url --token` and `backups download --token` values
-- `raw GET /api/health` stays anonymous by default
-- `raw GET /api/health --with-auth` attaches the saved auth token explicitly
-- Collections commands fail cleanly before login
-- Remote superuser login persists session state across CLI invocations
-- Remote `auth login --password-stdin`
-- Remote `auth status`, `auth whoami`, and `auth refresh`
-- Remote `settings get|patch|test-s3|test-email|apple-client-secret`
-- Remote `settings patch --stdin-json`
-- Remote `logs list|get|stats`
-- Remote `crons list|run`
-- Remote `collections list|get|create|update|ensure|delete|truncate|import|scaffolds`
-- Remote `collections ensure --if-exists fail`
-- Remote `collections ensure --if-missing fail`
-- Remote `collections ensure --output summary`
-- `config set` clears saved auth when the configured target no longer matches
-- `undo` / `redo` also clear saved auth when they restore a conflicting target
-- Remote `records auth-methods|auth-password|auth-oauth2|auth-refresh|request-otp|auth-otp|request-password-reset|confirm-password-reset|request-verification|confirm-verification|request-email-change|confirm-email-change|impersonate|create|get|list|update|delete`
-- Remote `records list --all`
-- Destructive command confirmations via `--yes`
-- Remote `batch run`
-- Remote `batch run --stdin-json`
-- Remote `files token|url`
-- Remote `backups list|create|upload|delete|download|restore`
+## Test Objectives
 
-The TypeScript suite uses Vitest plus local stubs/mocks so validation stays deterministic and does not require a real deployed PocketBase instance.
+The automated suite focuses on the behaviors that define the product contract:
+
+- command discovery and help output
+- JSON envelope stability for success, error, history, and REPL flows
+- authentication, state persistence, and command history redaction
+- remote client request construction and error handling
+- destructive operation guardrails
+- collection, record, file, backup, batch, and raw command behavior
+
+## Covered Areas
+
+### CLI Contract
+
+- installed CLI discoverability through `pocketbase-cli`
+- `--help` and `schema --json` coverage for the remote command surface
+- schema metadata coverage for examples, conflicts, choices, and `input_schema`
+- JSON output stability for `info`, `history`, and REPL streams
+
+### Authentication and State
+
+- remote superuser login via positional password and `--password-stdin`
+- browser-assisted login via `auth login-browser --no-open`
+- `auth status`, `auth whoami`, `auth refresh`, and logout flows
+- auth redaction in history and JSON success output
+- encrypted session persistence and private file permissions for `session.json` and its `.key`
+- automatic auth clearing when persisted target settings no longer match a stored auth session
+
+### Validation and Safety
+
+- `preflight` readiness reporting for config, auth, and health checks
+- acceptance of `POCKETBASE_CLI_BASE_URL` when persisted `base_url` is absent
+- early rejection of invalid numeric and base URL inputs
+- confirmation requirements for destructive or side-effectful commands
+- anonymous-by-default `raw` requests and explicit `--with-auth` attachment
+
+### Remote Operations
+
+- settings, logs, crons, collections, records, files, backups, and batch command coverage
+- pagination helpers such as `--all`
+- record auth helper flows including OAuth2, refresh, OTP, password reset, verification, and impersonation
+- binary download handling for backup archives
+- remote client failure wrapping for JSON and binary responses
+
+### Regression Cases
+
+- token redaction for file URL and backup download helpers
+- `records auth-refresh --no-save` preserving the previously stored auth session
+- OAuth2 authorization code and code verifier redaction in record auth history
+- mismatched auth target rejection for `raw --with-auth`
 
 ## Validation Commands
 
+Run the full local validation set from the repository root:
+
 ```sh
-cd <repo-root>
 npm install
 npm run typecheck
 npm run lint
 npm run test
 npm run build
 ```
+
+## Change Expectations
+
+Any change that affects command semantics, auth handling, state persistence, history redaction, or the JSON output contract should include matching automated coverage updates.

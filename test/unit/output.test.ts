@@ -62,8 +62,7 @@ describe("output envelope", () => {
   it("builds error payload with inferred type", () => {
     const payload = buildErrorEnvelope({
       action: "raw",
-      message:
-        "Base URL is required. Set `POCKETBASE_CLI_BASE_URL` in `.env` or run `config set base_url <url>` first.",
+      message: "Base URL is required. Run `config set base_url <url>` first or pass `--base-url`.",
       missingPrerequisite: "base_url"
     });
 

@@ -13,12 +13,11 @@ import type { RemoteResult } from "../http/remote-client";
 import { loadOptionalJsonObjectInput } from "../input/json-input";
 import { loadRecordMutationInput as loadSharedRecordMutationInput } from "../input/record-input";
 import { parseIntegerOptionValue } from "../input/validators";
-import { saveRemoteAuthResult } from "./auth-support";
+import { redactAuthResult, saveRemoteAuthResult } from "./auth-support";
 import {
   buildRemoteClient,
   fetchAllPages,
   handleRemoteError,
-  requireBaseUrl,
   requireConfirmation,
   runRemoteAction
 } from "./support";
@@ -224,6 +223,28 @@ type RecordMutationOptions = {
   binaryFile?: string[];
 };
 
+type RecordArgumentName = keyof typeof ARGUMENT_METADATA;
+
+type HistorySegment =
+  | {
+      kind: "option";
+      flag: string;
+      value?: string | null;
+      include?: boolean;
+      renderValue?: string;
+    }
+  | {
+      kind: "flag";
+      flag: string;
+      include: boolean;
+    }
+  | {
+      kind: "value";
+      value: string;
+      sensitive?: boolean;
+      renderValue?: string;
+    };
+
 function redactCommand(parts: string[], sensitiveIndexes?: Set<number>): string {
   if (!sensitiveIndexes || sensitiveIndexes.size === 0) {
     return parts.join(" ");
@@ -271,6 +292,114 @@ function buildMutationHistory(
   });
 
   return historyParts.join(" ");
+}
+
+function namedRecordArguments<TName extends string>(
+  argumentNames: readonly TName[],
+  values: string[]
+): Record<TName, string> {
+  return Object.fromEntries(
+    argumentNames.map((argumentName, index) => [argumentName, values[index] ?? ""])
+  ) as Record<TName, string>;
+}
+
+function buildPositionalRecordHistory(
+  commandName: string,
+  values: string[],
+  sensitiveValueIndexes?: number[]
+): string {
+  const historyParts = ["records", commandName, ...values];
+  const sensitiveIndexes =
+    sensitiveValueIndexes && sensitiveValueIndexes.length > 0
+      ? new Set(sensitiveValueIndexes.map((index) => index + 2))
+      : undefined;
+
+  return redactCommand(historyParts, sensitiveIndexes);
+}
+
+function buildRecordHistory(baseParts: string[], segments: HistorySegment[]): string {
+  const historyParts = [...baseParts];
+  const sensitiveIndexes = new Set<number>();
+
+  for (const segment of segments) {
+    if (segment.kind === "flag") {
+      if (segment.include) {
+        historyParts.push(segment.flag);
+      }
+      continue;
+    }
+
+    if (segment.kind === "option") {
+      const include = segment.include ?? (segment.value !== undefined && segment.value !== null);
+      if (!include) {
+        continue;
+      }
+      historyParts.push(segment.flag);
+      if (segment.value !== undefined && segment.value !== null) {
+        historyParts.push(segment.renderValue ?? segment.value);
+      }
+      continue;
+    }
+
+    historyParts.push(segment.renderValue ?? segment.value);
+    if (segment.sensitive) {
+      sensitiveIndexes.add(historyParts.length - 1);
+    }
+  }
+
+  return redactCommand(historyParts, sensitiveIndexes.size > 0 ? sensitiveIndexes : undefined);
+}
+
+function createSimpleRecordRemoteDefinition<TArgs extends RecordArgumentName>(
+  context: AppContext,
+  options: {
+    name: string;
+    path: string;
+    summary: string;
+    authRequired: boolean;
+    argumentNames: readonly TArgs[];
+    sensitiveValueIndexes?: number[];
+    successMessage: string;
+    operation: (
+      client: ReturnType<typeof buildRemoteClient>,
+      args: Record<TArgs, string>
+    ) => Promise<RemoteResult<unknown>>;
+  }
+): CommandDefinition {
+  return {
+    name: options.name,
+    path: options.path,
+    kind: "command",
+    summary: options.summary,
+    authRequired: options.authRequired,
+    destructive: false,
+    confirmationRequired: false,
+    parameters: options.argumentNames.map((argumentName) => argumentParameter(argumentName)),
+    build: () => {
+      const command = new Command(options.name).description(options.summary);
+
+      for (const argumentName of options.argumentNames) {
+        command.argument(`<${argumentName}>`);
+      }
+
+      return command.action(async (...rawValues: string[]) => {
+        const values = rawValues.slice(0, options.argumentNames.length);
+        const args = namedRecordArguments(options.argumentNames, values);
+
+        await recordCommand(
+          context,
+          buildPositionalRecordHistory(options.name, values, options.sensitiveValueIndexes)
+        );
+
+        await runRemoteAction(context, {
+          action: options.path,
+          successMessage: options.successMessage,
+          requireAuth: options.authRequired,
+          operation: (client) => options.operation(client, args)
+        });
+      });
+    }
+  };
 }
 
 function extractMfaPayload(
@@ -345,7 +474,66 @@ async function emitRecordAuthOrMfaResult(
     jsonOutput: context.jsonMode,
     action: options.action,
     message: options.successMessage,
-    data: options.result
+    data: redactAuthResult(options.result)
+  });
+}
+
+async function runRecordAuthAction(
+  context: AppContext,
+  options: {
+    action: string;
+    collection: string;
+    requireAuth: boolean;
+    saveAuth: boolean;
+    successMessage: string;
+    mfaMessage: string;
+    baseUrl?: string;
+    operation: (client: ReturnType<typeof buildRemoteClient>) => Promise<RemoteResult<unknown>>;
+  }
+): Promise<void> {
+  const client = buildRemoteClient(context, {
+    action: options.action,
+    requireAuth: options.requireAuth
+  });
+
+  try {
+    const result = await options.operation(client);
+    await emitRecordAuthOrMfaResult(context, {
+      action: options.action,
+      result,
+      successMessage: options.successMessage,
+      mfaMessage: options.mfaMessage,
+      baseUrl: options.baseUrl ?? client.baseUrl,
+      collection: options.collection,
+      saveAuth: options.saveAuth
+    });
+  } catch (error) {
+    handleRemoteError(context, options.action, error);
+  }
+}
+
+async function executeRecordAuthCommand(
+  context: AppContext,
+  options: {
+    history: string;
+    action: string;
+    collection: string;
+    requireAuth: boolean;
+    saveAuth: boolean;
+    successMessage: string;
+    mfaMessage: string;
+    operation: (client: ReturnType<typeof buildRemoteClient>) => Promise<RemoteResult<unknown>>;
+  }
+): Promise<void> {
+  await recordCommand(context, options.history);
+  await runRecordAuthAction(context, {
+    action: options.action,
+    collection: options.collection,
+    requireAuth: options.requireAuth,
+    saveAuth: options.saveAuth,
+    successMessage: options.successMessage,
+    mfaMessage: options.mfaMessage,
+    operation: options.operation
   });
 }
 
@@ -1235,29 +1423,15 @@ function createRecordsDeleteDefinition(context: AppContext): CommandDefinition {
 }
 
 function createRecordsAuthMethodsDefinition(context: AppContext): CommandDefinition {
-  return {
+  return createSimpleRecordRemoteDefinition(context, {
     name: "auth-methods",
     path: "records.auth-methods",
-    kind: "command",
     summary: "Fetch record auth methods for a collection",
     authRequired: false,
-    destructive: false,
-    confirmationRequired: false,
-    parameters: [argumentParameter("collection")],
-    build: () =>
-      new Command("auth-methods")
-        .description("Fetch record auth methods for a collection")
-        .argument("<collection>")
-        .action(async (collection: string) => {
-          await recordCommand(context, `records auth-methods ${collection}`);
-          await runRemoteAction(context, {
-            action: "records.auth-methods",
-            successMessage: "Record auth methods fetch completed",
-            requireAuth: false,
-            operation: (client) => client.recordAuthMethods(collection)
-          });
-        })
-  };
+    argumentNames: ["collection"],
+    successMessage: "Record auth methods fetch completed",
+    operation: (client, args) => client.recordAuthMethods(args.collection)
+  });
 }
 
 function createRecordsAuthPasswordDefinition(context: AppContext): CommandDefinition {
@@ -1307,56 +1481,33 @@ function createRecordsAuthPasswordDefinition(context: AppContext): CommandDefini
               save?: boolean;
             }
           ) => {
-            const baseUrl = requireBaseUrl(context, {
-              action: "records.auth-password"
-            });
-
-            const historyParts = ["records", "auth-password", collection];
-            if (options.identityField) {
-              historyParts.push("--identity-field", options.identityField);
-            }
-            if (options.fields) {
-              historyParts.push("--fields", options.fields);
-            }
-            if (options.expand) {
-              historyParts.push("--expand", options.expand);
-            }
-            if (options.mfaId) {
-              historyParts.push("--mfa-id", options.mfaId);
-            }
-            if (options.save === false) {
-              historyParts.push("--no-save");
-            }
-            historyParts.push(identity, password);
-            await recordCommand(context, redactCommand(historyParts, new Set([historyParts.length - 1])));
-
-            const client = buildRemoteClient(context, {
+            await executeRecordAuthCommand(context, {
+              history: buildRecordHistory(["records", "auth-password", collection], [
+                { kind: "option", flag: "--identity-field", value: options.identityField },
+                { kind: "option", flag: "--fields", value: options.fields },
+                { kind: "option", flag: "--expand", value: options.expand },
+                { kind: "option", flag: "--mfa-id", value: options.mfaId },
+                { kind: "flag", flag: "--no-save", include: options.save === false },
+                { kind: "value", value: identity },
+                { kind: "value", value: password, sensitive: true }
+              ]),
               action: "records.auth-password",
-              requireAuth: false
+              collection,
+              requireAuth: false,
+              saveAuth: options.save !== false,
+              successMessage: "Record password auth completed",
+              mfaMessage: "Record password auth requires MFA confirmation",
+              operation: (client) =>
+                client.recordAuthPassword({
+                  collection,
+                  identity,
+                  password,
+                  identityField: options.identityField,
+                  fields: options.fields,
+                  expand: options.expand,
+                  mfaId: options.mfaId
+                })
             });
-
-            try {
-              const result = await client.recordAuthPassword({
-                collection,
-                identity,
-                password,
-                identityField: options.identityField,
-                fields: options.fields,
-                expand: options.expand,
-                mfaId: options.mfaId
-              });
-              await emitRecordAuthOrMfaResult(context, {
-                action: "records.auth-password",
-                result,
-                successMessage: "Record password auth completed",
-                mfaMessage: "Record password auth requires MFA confirmation",
-                baseUrl,
-                collection,
-                saveAuth: options.save !== false
-              });
-            } catch (error) {
-              handleRemoteError(context, "records.auth-password", error);
-            }
           }
         )
   };
@@ -1425,41 +1576,6 @@ function createRecordsAuthOauth2Definition(context: AppContext): CommandDefiniti
               save?: boolean;
             }
           ) => {
-            const baseUrl = requireBaseUrl(context, {
-              action: "records.auth-oauth2"
-            });
-
-            const historyParts = [
-              "records",
-              "auth-oauth2",
-              collection,
-              "--provider",
-              options.provider,
-              "--code",
-              "********",
-              "--redirect-url",
-              options.redirectUrl
-            ];
-            if (options.codeVerifier) {
-              historyParts.push("--code-verifier", "********");
-            }
-            if (options.createData) {
-              historyParts.push("--create-data", "<json>");
-            }
-            if (options.createFile) {
-              historyParts.push("--create-file", options.createFile);
-            }
-            if (options.fields) {
-              historyParts.push("--fields", options.fields);
-            }
-            if (options.expand) {
-              historyParts.push("--expand", options.expand);
-            }
-            if (options.save === false) {
-              historyParts.push("--no-save");
-            }
-            await recordCommand(context, historyParts.join(" "));
-
             let createPayload: Record<string, unknown> | null;
             try {
               createPayload = await loadOptionalJsonObjectInput({
@@ -1477,34 +1593,51 @@ function createRecordsAuthOauth2Definition(context: AppContext): CommandDefiniti
               });
             }
 
-            const client = buildRemoteClient(context, {
+            await executeRecordAuthCommand(context, {
+              history: buildRecordHistory(["records", "auth-oauth2", collection], [
+                { kind: "option", flag: "--provider", value: options.provider },
+                {
+                  kind: "option",
+                  flag: "--code",
+                  value: options.code,
+                  renderValue: "********"
+                },
+                { kind: "option", flag: "--redirect-url", value: options.redirectUrl },
+                {
+                  kind: "option",
+                  flag: "--code-verifier",
+                  value: options.codeVerifier,
+                  renderValue: "********"
+                },
+                {
+                  kind: "option",
+                  flag: "--create-data",
+                  value: options.createData,
+                  renderValue: "<json>"
+                },
+                { kind: "option", flag: "--create-file", value: options.createFile },
+                { kind: "option", flag: "--fields", value: options.fields },
+                { kind: "option", flag: "--expand", value: options.expand },
+                { kind: "flag", flag: "--no-save", include: options.save === false }
+              ]),
               action: "records.auth-oauth2",
-              requireAuth: false
+              collection,
+              requireAuth: false,
+              saveAuth: options.save !== false,
+              successMessage: "Record OAuth2 auth completed",
+              mfaMessage: "Record OAuth2 auth requires MFA confirmation",
+              operation: (client) =>
+                client.recordAuthOauth2({
+                  collection,
+                  provider: options.provider,
+                  code: options.code,
+                  redirectUrl: options.redirectUrl,
+                  codeVerifier: options.codeVerifier,
+                  createData: createPayload,
+                  fields: options.fields,
+                  expand: options.expand
+                })
             });
-
-            try {
-              const result = await client.recordAuthOauth2({
-                collection,
-                provider: options.provider,
-                code: options.code,
-                redirectUrl: options.redirectUrl,
-                codeVerifier: options.codeVerifier,
-                createData: createPayload,
-                fields: options.fields,
-                expand: options.expand
-              });
-              await emitRecordAuthOrMfaResult(context, {
-                action: "records.auth-oauth2",
-                result,
-                successMessage: "Record OAuth2 auth completed",
-                mfaMessage: "Record OAuth2 auth requires MFA confirmation",
-                baseUrl,
-                collection,
-                saveAuth: options.save !== false
-              });
-            } catch (error) {
-              handleRemoteError(context, "records.auth-oauth2", error);
-            }
           }
         )
   };
@@ -1542,75 +1675,44 @@ function createRecordsAuthRefreshDefinition(context: AppContext): CommandDefinit
               save?: boolean;
             }
           ) => {
-            const historyParts = ["records", "auth-refresh", collection];
-            if (options.fields) {
-              historyParts.push("--fields", options.fields);
-            }
-            if (options.expand) {
-              historyParts.push("--expand", options.expand);
-            }
-            if (options.save === false) {
-              historyParts.push("--no-save");
-            }
-            await recordCommand(context, historyParts.join(" "));
-
-            const client = buildRemoteClient(context, {
+            await executeRecordAuthCommand(context, {
+              history: buildRecordHistory(["records", "auth-refresh", collection], [
+                { kind: "option", flag: "--fields", value: options.fields },
+                { kind: "option", flag: "--expand", value: options.expand },
+                { kind: "flag", flag: "--no-save", include: options.save === false }
+              ]),
               action: "records.auth-refresh",
-              requireAuth: true
+              collection,
+              requireAuth: true,
+              saveAuth: options.save !== false,
+              successMessage: "Record auth refresh completed",
+              mfaMessage: "Record auth refresh requires MFA confirmation",
+              operation: (client) =>
+                client.recordAuthRefresh({
+                  collection,
+                  fields: options.fields,
+                  expand: options.expand
+                })
             });
-
-            try {
-              const result = await client.recordAuthRefresh({
-                collection,
-                fields: options.fields,
-                expand: options.expand
-              });
-              await emitRecordAuthOrMfaResult(context, {
-                action: "records.auth-refresh",
-                result,
-                successMessage: "Record auth refresh completed",
-                mfaMessage: "Record auth refresh requires MFA confirmation",
-                baseUrl: client.baseUrl,
-                collection,
-                saveAuth: options.save !== false
-              });
-            } catch (error) {
-              handleRemoteError(context, "records.auth-refresh", error);
-            }
           }
         )
   };
 }
 
 function createRecordsRequestOtpDefinition(context: AppContext): CommandDefinition {
-  return {
+  return createSimpleRecordRemoteDefinition(context, {
     name: "request-otp",
     path: "records.request-otp",
-    kind: "command",
     summary: "Request a record OTP",
     authRequired: false,
-    destructive: false,
-    confirmationRequired: false,
-    parameters: [argumentParameter("collection"), argumentParameter("email")],
-    build: () =>
-      new Command("request-otp")
-        .description("Request a record OTP")
-        .argument("<collection>")
-        .argument("<email>")
-        .action(async (collection: string, email: string) => {
-          await recordCommand(context, `records request-otp ${collection} ${email}`);
-          await runRemoteAction(context, {
-            action: "records.request-otp",
-            successMessage: "Record OTP request completed",
-            requireAuth: false,
-            operation: (client) =>
-              client.recordRequestOtp({
-                collection,
-                email
-              })
-          });
-        })
-  };
+    argumentNames: ["collection", "email"],
+    successMessage: "Record OTP request completed",
+    operation: (client, args) =>
+      client.recordRequestOtp({
+        collection: args.collection,
+        email: args.email
+      })
+  });
 }
 
 function createRecordsAuthOtpDefinition(context: AppContext): CommandDefinition {
@@ -1653,134 +1755,29 @@ function createRecordsAuthOtpDefinition(context: AppContext): CommandDefinition 
               save?: boolean;
             }
           ) => {
-            const baseUrl = requireBaseUrl(context, {
-              action: "records.auth-otp"
-            });
-
-            const historyParts = ["records", "auth-otp", collection];
-            if (options.fields) {
-              historyParts.push("--fields", options.fields);
-            }
-            if (options.expand) {
-              historyParts.push("--expand", options.expand);
-            }
-            if (options.mfaId) {
-              historyParts.push("--mfa-id", options.mfaId);
-            }
-            if (options.save === false) {
-              historyParts.push("--no-save");
-            }
-            historyParts.push(otpId, password);
-            await recordCommand(context, redactCommand(historyParts, new Set([historyParts.length - 1])));
-
-            const client = buildRemoteClient(context, {
+            await executeRecordAuthCommand(context, {
+              history: buildRecordHistory(["records", "auth-otp", collection], [
+                { kind: "option", flag: "--fields", value: options.fields },
+                { kind: "option", flag: "--expand", value: options.expand },
+                { kind: "option", flag: "--mfa-id", value: options.mfaId },
+                { kind: "flag", flag: "--no-save", include: options.save === false },
+                { kind: "value", value: otpId },
+                { kind: "value", value: password, sensitive: true }
+              ]),
               action: "records.auth-otp",
-              requireAuth: false
-            });
-
-            try {
-              const result = await client.recordAuthOtp({
-                collection,
-                otpId,
-                password,
-                fields: options.fields,
-                expand: options.expand,
-                mfaId: options.mfaId
-              });
-              await emitRecordAuthOrMfaResult(context, {
-                action: "records.auth-otp",
-                result,
-                successMessage: "Record OTP auth completed",
-                mfaMessage: "Record OTP auth requires MFA confirmation",
-                baseUrl,
-                collection,
-                saveAuth: options.save !== false
-              });
-            } catch (error) {
-              handleRemoteError(context, "records.auth-otp", error);
-            }
-          }
-        )
-  };
-}
-
-function createRecordsRequestPasswordResetDefinition(context: AppContext): CommandDefinition {
-  return {
-    name: "request-password-reset",
-    path: "records.request-password-reset",
-    kind: "command",
-    summary: "Request a record password reset",
-    authRequired: false,
-    destructive: false,
-    confirmationRequired: false,
-    parameters: [argumentParameter("collection"), argumentParameter("email")],
-    build: () =>
-      new Command("request-password-reset")
-        .description("Request a record password reset")
-        .argument("<collection>")
-        .argument("<email>")
-        .action(async (collection: string, email: string) => {
-          await recordCommand(context, `records request-password-reset ${collection} ${email}`);
-          await runRemoteAction(context, {
-            action: "records.request-password-reset",
-            successMessage: "Record password reset request completed",
-            requireAuth: false,
-            operation: (client) =>
-              client.recordRequestPasswordReset({
-                collection,
-                email
-              })
-          });
-        })
-  };
-}
-
-function createRecordsConfirmPasswordResetDefinition(context: AppContext): CommandDefinition {
-  return {
-    name: "confirm-password-reset",
-    path: "records.confirm-password-reset",
-    kind: "command",
-    summary: "Confirm a record password reset",
-    authRequired: false,
-    destructive: false,
-    confirmationRequired: false,
-    parameters: [
-      argumentParameter("collection"),
-      argumentParameter("token"),
-      argumentParameter("password"),
-      argumentParameter("password_confirm")
-    ],
-    build: () =>
-      new Command("confirm-password-reset")
-        .description("Confirm a record password reset")
-        .argument("<collection>")
-        .argument("<token>")
-        .argument("<password>")
-        .argument("<password_confirm>")
-        .action(
-          async (
-            collection: string,
-            token: string,
-            password: string,
-            passwordConfirm: string
-          ) => {
-            await recordCommand(
-              context,
-              redactCommand(
-                ["records", "confirm-password-reset", collection, token, password, passwordConfirm],
-                new Set([3, 4, 5])
-              )
-            );
-            await runRemoteAction(context, {
-              action: "records.confirm-password-reset",
-              successMessage: "Record password reset confirmation completed",
+              collection,
               requireAuth: false,
+              saveAuth: options.save !== false,
+              successMessage: "Record OTP auth completed",
+              mfaMessage: "Record OTP auth requires MFA confirmation",
               operation: (client) =>
-                client.recordConfirmPasswordReset({
+                client.recordAuthOtp({
                   collection,
-                  token,
+                  otpId,
                   password,
-                  passwordConfirm
+                  fields: options.fields,
+                  expand: options.expand,
+                  mfaId: options.mfaId
                 })
             });
           }
@@ -1788,142 +1785,106 @@ function createRecordsConfirmPasswordResetDefinition(context: AppContext): Comma
   };
 }
 
+function createRecordsRequestPasswordResetDefinition(context: AppContext): CommandDefinition {
+  return createSimpleRecordRemoteDefinition(context, {
+    name: "request-password-reset",
+    path: "records.request-password-reset",
+    summary: "Request a record password reset",
+    authRequired: false,
+    argumentNames: ["collection", "email"],
+    successMessage: "Record password reset request completed",
+    operation: (client, args) =>
+      client.recordRequestPasswordReset({
+        collection: args.collection,
+        email: args.email
+      })
+  });
+}
+
+function createRecordsConfirmPasswordResetDefinition(context: AppContext): CommandDefinition {
+  return createSimpleRecordRemoteDefinition(context, {
+    name: "confirm-password-reset",
+    path: "records.confirm-password-reset",
+    summary: "Confirm a record password reset",
+    authRequired: false,
+    argumentNames: ["collection", "token", "password", "password_confirm"],
+    sensitiveValueIndexes: [1, 2, 3],
+    successMessage: "Record password reset confirmation completed",
+    operation: (client, args) =>
+      client.recordConfirmPasswordReset({
+        collection: args.collection,
+        token: args.token,
+        password: args.password,
+        passwordConfirm: args.password_confirm
+      })
+  });
+}
+
 function createRecordsRequestVerificationDefinition(context: AppContext): CommandDefinition {
-  return {
+  return createSimpleRecordRemoteDefinition(context, {
     name: "request-verification",
     path: "records.request-verification",
-    kind: "command",
     summary: "Request record verification",
     authRequired: false,
-    destructive: false,
-    confirmationRequired: false,
-    parameters: [argumentParameter("collection"), argumentParameter("email")],
-    build: () =>
-      new Command("request-verification")
-        .description("Request record verification")
-        .argument("<collection>")
-        .argument("<email>")
-        .action(async (collection: string, email: string) => {
-          await recordCommand(context, `records request-verification ${collection} ${email}`);
-          await runRemoteAction(context, {
-            action: "records.request-verification",
-            successMessage: "Record verification request completed",
-            requireAuth: false,
-            operation: (client) =>
-              client.recordRequestVerification({
-                collection,
-                email
-              })
-          });
-        })
-  };
+    argumentNames: ["collection", "email"],
+    successMessage: "Record verification request completed",
+    operation: (client, args) =>
+      client.recordRequestVerification({
+        collection: args.collection,
+        email: args.email
+      })
+  });
 }
 
 function createRecordsConfirmVerificationDefinition(context: AppContext): CommandDefinition {
-  return {
+  return createSimpleRecordRemoteDefinition(context, {
     name: "confirm-verification",
     path: "records.confirm-verification",
-    kind: "command",
     summary: "Confirm record verification",
     authRequired: false,
-    destructive: false,
-    confirmationRequired: false,
-    parameters: [argumentParameter("collection"), argumentParameter("token")],
-    build: () =>
-      new Command("confirm-verification")
-        .description("Confirm record verification")
-        .argument("<collection>")
-        .argument("<token>")
-        .action(async (collection: string, token: string) => {
-          await recordCommand(
-            context,
-            redactCommand(["records", "confirm-verification", collection, token], new Set([3]))
-          );
-          await runRemoteAction(context, {
-            action: "records.confirm-verification",
-            successMessage: "Record verification confirmation completed",
-            requireAuth: false,
-            operation: (client) =>
-              client.recordConfirmVerification({
-                collection,
-                token
-              })
-          });
-        })
-  };
+    argumentNames: ["collection", "token"],
+    sensitiveValueIndexes: [1],
+    successMessage: "Record verification confirmation completed",
+    operation: (client, args) =>
+      client.recordConfirmVerification({
+        collection: args.collection,
+        token: args.token
+      })
+  });
 }
 
 function createRecordsRequestEmailChangeDefinition(context: AppContext): CommandDefinition {
-  return {
+  return createSimpleRecordRemoteDefinition(context, {
     name: "request-email-change",
     path: "records.request-email-change",
-    kind: "command",
     summary: "Request record email change",
     authRequired: true,
-    destructive: false,
-    confirmationRequired: false,
-    parameters: [argumentParameter("collection"), argumentParameter("new_email")],
-    build: () =>
-      new Command("request-email-change")
-        .description("Request record email change")
-        .argument("<collection>")
-        .argument("<new_email>")
-        .action(async (collection: string, newEmail: string) => {
-          await recordCommand(context, `records request-email-change ${collection} ${newEmail}`);
-          await runRemoteAction(context, {
-            action: "records.request-email-change",
-            successMessage: "Record email change request completed",
-            operation: (client) =>
-              client.recordRequestEmailChange({
-                collection,
-                newEmail
-              })
-          });
-        })
-  };
+    argumentNames: ["collection", "new_email"],
+    successMessage: "Record email change request completed",
+    operation: (client, args) =>
+      client.recordRequestEmailChange({
+        collection: args.collection,
+        newEmail: args.new_email
+      })
+  });
 }
 
 function createRecordsConfirmEmailChangeDefinition(context: AppContext): CommandDefinition {
-  return {
+  return createSimpleRecordRemoteDefinition(context, {
     name: "confirm-email-change",
     path: "records.confirm-email-change",
-    kind: "command",
     summary: "Confirm record email change",
     authRequired: false,
-    destructive: false,
-    confirmationRequired: false,
-    parameters: [
-      argumentParameter("collection"),
-      argumentParameter("token"),
-      argumentParameter("password")
-    ],
-    build: () =>
-      new Command("confirm-email-change")
-        .description("Confirm record email change")
-        .argument("<collection>")
-        .argument("<token>")
-        .argument("<password>")
-        .action(async (collection: string, token: string, password: string) => {
-          await recordCommand(
-            context,
-            redactCommand(
-              ["records", "confirm-email-change", collection, token, password],
-              new Set([3, 4])
-            )
-          );
-          await runRemoteAction(context, {
-            action: "records.confirm-email-change",
-            successMessage: "Record email change confirmation completed",
-            requireAuth: false,
-            operation: (client) =>
-              client.recordConfirmEmailChange({
-                collection,
-                token,
-                password
-              })
-          });
-        })
-  };
+    argumentNames: ["collection", "token", "password"],
+    sensitiveValueIndexes: [1, 2],
+    successMessage: "Record email change confirmation completed",
+    operation: (client, args) =>
+      client.recordConfirmEmailChange({
+        collection: args.collection,
+        token: args.token,
+        password: args.password
+      })
+  });
 }
 
 function createRecordsImpersonateDefinition(context: AppContext): CommandDefinition {
@@ -1966,51 +1927,33 @@ function createRecordsImpersonateDefinition(context: AppContext): CommandDefinit
               save?: boolean;
             }
           ) => {
-            const historyParts = ["records", "impersonate", collection, recordId];
-            if (options.duration !== undefined) {
-              historyParts.push("--duration", options.duration);
-            }
-            if (options.fields) {
-              historyParts.push("--fields", options.fields);
-            }
-            if (options.expand) {
-              historyParts.push("--expand", options.expand);
-            }
-            if (options.save === false) {
-              historyParts.push("--no-save");
-            }
-            await recordCommand(context, historyParts.join(" "));
-
-            const client = buildRemoteClient(context, {
+            await executeRecordAuthCommand(context, {
+              history: buildRecordHistory(["records", "impersonate", collection, recordId], [
+                { kind: "option", flag: "--duration", value: options.duration },
+                { kind: "option", flag: "--fields", value: options.fields },
+                { kind: "option", flag: "--expand", value: options.expand },
+                { kind: "flag", flag: "--no-save", include: options.save === false }
+              ]),
               action: "records.impersonate",
-              requireAuth: true
+              collection,
+              requireAuth: true,
+              saveAuth: options.save !== false,
+              successMessage: "Record impersonation completed",
+              mfaMessage: "Record impersonation requires MFA confirmation",
+              operation: (client) =>
+                client.recordImpersonate({
+                  collection,
+                  recordId,
+                  duration: parseNumber(
+                    context,
+                    "records.impersonate",
+                    "--duration",
+                    options.duration
+                  ),
+                  fields: options.fields,
+                  expand: options.expand
+                })
             });
-
-            try {
-              const result = await client.recordImpersonate({
-                collection,
-                recordId,
-                duration: parseNumber(
-                  context,
-                  "records.impersonate",
-                  "--duration",
-                  options.duration
-                ),
-                fields: options.fields,
-                expand: options.expand
-              });
-              await emitRecordAuthOrMfaResult(context, {
-                action: "records.impersonate",
-                result,
-                successMessage: "Record impersonation completed",
-                mfaMessage: "Record impersonation requires MFA confirmation",
-                baseUrl: client.baseUrl,
-                collection,
-                saveAuth: options.save !== false
-              });
-            } catch (error) {
-              handleRemoteError(context, "records.impersonate", error);
-            }
           }
         )
   };

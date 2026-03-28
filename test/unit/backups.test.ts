@@ -7,41 +7,16 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createBackupsDefinition } from "../../src/commands/backups";
 import { CliExitError } from "../../src/core/output";
 import { PocketBaseRemoteClient } from "../../src/http/remote-client";
-import { SessionState, SessionStore } from "../../src/core/session-store";
+import { buildSubcommand } from "./helpers/command";
+import { makeContext } from "./helpers/context";
+import { captureStdout } from "./helpers/output";
 
 function buildContext() {
-  const store = new SessionStore("/tmp/pocketbase-cli-backups-session.json");
-  const state = new SessionState();
-  state.setConfig("base_url", "https://pb.example.com");
-  state.setRemoteAuth({
-    baseUrl: "https://pb.example.com/",
-    token: "token"
+  return makeContext({
+    storePath: "/tmp/pocketbase-cli-backups-session.json",
+    baseUrl: "https://pb.example.com",
+    authed: true
   });
-
-  return {
-    version: "0.1.0",
-    jsonMode: false,
-    store,
-    state
-  };
-}
-
-function captureStdout(): { output: string[]; restore: () => void } {
-  const output: string[] = [];
-  const original = process.stdout.write.bind(process.stdout);
-
-  vi.spyOn(process.stdout, "write").mockImplementation((chunk: string | Uint8Array) => {
-    output.push(String(chunk));
-    return true;
-  });
-
-  return {
-    output,
-    restore: () => {
-      (process.stdout.write as unknown as ReturnType<typeof vi.spyOn>).mockRestore?.();
-      process.stdout.write = original as typeof process.stdout.write;
-    }
-  };
 }
 
 async function createTempDir(): Promise<string> {
@@ -70,9 +45,7 @@ describe("backups commands", () => {
       data: {}
     });
 
-    const definition = createBackupsDefinition(context);
-    const uploadDefinition = definition.children?.find((child) => child.name === "upload");
-    const command = uploadDefinition?.build?.();
+    const command = buildSubcommand(createBackupsDefinition(context), "upload");
 
     await command?.parseAsync(["node", "upload", archivePath]);
 
@@ -105,9 +78,7 @@ describe("backups commands", () => {
         data: new Uint8Array([7, 8, 9])
       });
 
-    const definition = createBackupsDefinition(context);
-    const downloadDefinition = definition.children?.find((child) => child.name === "download");
-    const command = downloadDefinition?.build?.();
+    const command = buildSubcommand(createBackupsDefinition(context), "download");
     const capture = captureStdout();
 
     try {
@@ -145,9 +116,7 @@ describe("backups commands", () => {
 
     const downloadSpy = vi.spyOn(PocketBaseRemoteClient.prototype, "backupsDownload");
 
-    const definition = createBackupsDefinition(context);
-    const downloadDefinition = definition.children?.find((child) => child.name === "download");
-    const command = downloadDefinition?.build?.();
+    const command = buildSubcommand(createBackupsDefinition(context), "download");
 
     await expect(
       command?.parseAsync(["node", "download", "snapshot.zip", "--output", outputPath])
@@ -158,9 +127,7 @@ describe("backups commands", () => {
 
   it("requires --yes before deleting a backup", async () => {
     const context = buildContext();
-    const definition = createBackupsDefinition(context);
-    const deleteDefinition = definition.children?.find((child) => child.name === "delete");
-    const command = deleteDefinition?.build?.();
+    const command = buildSubcommand(createBackupsDefinition(context), "delete");
 
     await expect(command?.parseAsync(["node", "delete", "snapshot.zip"])).rejects.toBeInstanceOf(
       CliExitError
