@@ -14,7 +14,8 @@ import { createOptionParameter } from "../contract/metadata";
 import { emitError, emitSuccess } from "../core/output";
 import { PocketBaseRemoteClient, PocketBaseRemoteError } from "../http/remote-client";
 import { parseIntegerOptionValue } from "../input/validators";
-import { saveRemoteAuthResult } from "./auth-support";
+import { redactAuthResult, saveRemoteAuthResult } from "./auth-support";
+import { runPreflightCheck } from "./preflight";
 import { LOGIN_BASE_URL_REQUIRED_MESSAGE, requireBaseUrl } from "./support";
 
 function escapeHtml(value: string): string {
@@ -464,8 +465,13 @@ export function createAuthLoginBrowserDefinition(context: AppContext): CommandDe
               emitSuccess({
                 jsonOutput: context.jsonMode,
                 action,
-                message: "Remote auth login successful",
-                data: result
+                message: "Remote auth login successful and preflight passed",
+                data: {
+                  auth: redactAuthResult(result),
+                  preflight: await runPreflightCheck(context, {
+                    requireAuth: true
+                  })
+                }
               });
             } catch (error) {
               const message =

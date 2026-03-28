@@ -64,15 +64,32 @@ describe("auth commands", () => {
   it("logs in with positional password and persists auth state", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        status: 200,
-        statusText: "OK",
-        text: async () =>
-          JSON.stringify({
-            token: "secret-token",
-            record: { id: "superuser_1", email: "admin@example.com" }
-          })
+      vi.fn().mockImplementation(async (input: string | URL | Request) => {
+        const url = String(input);
+        if (url.includes("/api/health")) {
+          return {
+            ok: true,
+            status: 200,
+            statusText: "OK",
+            text: async () =>
+              JSON.stringify({
+                message: "API is healthy.",
+                code: 200,
+                data: {}
+              })
+          };
+        }
+
+        return {
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          text: async () =>
+            JSON.stringify({
+              token: "secret-token",
+              record: { id: "superuser_1", email: "admin@example.com" }
+            })
+        };
       })
     );
 
@@ -109,20 +126,39 @@ describe("auth commands", () => {
       id: "superuser_1",
       email: "admin@example.com"
     });
+    expect(capture.output.join("")).not.toContain("secret-token");
+    expect(capture.output.join("")).toContain("********");
   });
 
   it("redacts password-stdin login history without persisting the flag", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        status: 200,
-        statusText: "OK",
-        text: async () =>
-          JSON.stringify({
-            token: "secret-token",
-            record: { id: "superuser_1", email: "admin@example.com" }
-          })
+      vi.fn().mockImplementation(async (input: string | URL | Request) => {
+        const url = String(input);
+        if (url.includes("/api/health")) {
+          return {
+            ok: true,
+            status: 200,
+            statusText: "OK",
+            text: async () =>
+              JSON.stringify({
+                message: "API is healthy.",
+                code: 200,
+                data: {}
+              })
+          };
+        }
+
+        return {
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          text: async () =>
+            JSON.stringify({
+              token: "secret-token",
+              record: { id: "superuser_1", email: "admin@example.com" }
+            })
+        };
       })
     );
 
@@ -245,15 +281,32 @@ describe("auth commands", () => {
 
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        status: 200,
-        statusText: "OK",
-        text: async () =>
-          JSON.stringify({
-            token: "secret-token",
-            record: { id: "superuser_1", email: "admin@example.com" }
-          })
+      vi.fn().mockImplementation(async (input: string | URL | Request) => {
+        const url = String(input);
+        if (url.includes("/api/health")) {
+          return {
+            ok: true,
+            status: 200,
+            statusText: "OK",
+            text: async () =>
+              JSON.stringify({
+                message: "API is healthy.",
+                code: 200,
+                data: {}
+              })
+          };
+        }
+
+        return {
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          text: async () =>
+            JSON.stringify({
+              token: "secret-token",
+              record: { id: "superuser_1", email: "admin@example.com" }
+            })
+        };
       })
     );
 
@@ -284,6 +337,16 @@ describe("auth commands", () => {
       data: {
         token: "secret-token",
         record: { id: "superuser_1", email: "admin@example.com" }
+      }
+    });
+    vi.spyOn(PocketBaseRemoteClient.prototype, "raw").mockResolvedValue({
+      method: "GET",
+      url: "https://pb.example.com/api/health",
+      status: 200,
+      data: {
+        message: "API is healthy.",
+        code: 200,
+        data: {}
       }
     });
 
@@ -347,8 +410,20 @@ describe("auth commands", () => {
     const payload = JSON.parse(stdout.output.join("").trim()) as {
       action: string;
       message: string;
+      data: {
+        auth: {
+          data: {
+            token: string;
+          };
+        };
+        preflight: {
+          ready: boolean;
+        };
+      };
     };
     expect(payload.action).toBe("auth.login-browser");
-    expect(payload.message).toBe("Remote auth login successful");
+    expect(payload.message).toBe("Remote auth login successful and preflight passed");
+    expect(payload.data.auth.data.token).toBe("********");
+    expect(payload.data.preflight.ready).toBe(true);
   });
 });

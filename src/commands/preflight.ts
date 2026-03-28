@@ -69,6 +69,167 @@ async function probeHealth(context: AppContext, baseUrl: string): Promise<Record
   }
 }
 
+export async function runPreflightCheck(
+  context: AppContext,
+  options: {
+    baseUrl?: string;
+    collection?: string;
+    requireAuth?: boolean;
+    skipHealth?: boolean;
+  }
+): Promise<Record<string, unknown>> {
+  const resolvedBaseUrl = resolveBaseUrl(context, options.baseUrl);
+  const resolvedCollection = resolveAuthCollection(context, options.collection);
+  const savedAuthBaseUrl = normalizeBaseUrl(context.state.remoteAuth.base_url ?? null);
+  const savedAuthCollection = String(context.state.remoteAuth.collection ?? "_superusers");
+  const savedAuthPresent = context.state.hasRemoteAuth();
+  const authMatchesTarget =
+    savedAuthPresent &&
+    savedAuthBaseUrl === resolvedBaseUrl &&
+    savedAuthCollection === resolvedCollection;
+
+  const checks: Record<string, unknown>[] = [];
+  const missingPrerequisites: string[] = [];
+  const recommendations: string[] = [];
+
+  if (resolvedBaseUrl) {
+    checks.push(
+      createCheck({
+        name: "base_url",
+        status: "pass",
+        required: true,
+        message: "Base URL is configured.",
+        data: { resolved_base_url: resolvedBaseUrl }
+      })
+    );
+  } else {
+    missingPrerequisites.push("base_url");
+    recommendations.push(
+      "Set `POCKETBASE_CLI_BASE_URL` in `.env`, run `config set base_url <url>`, or pass `--base-url <url>`."
+    );
+    checks.push(
+      createCheck({
+        name: "base_url",
+        status: "fail",
+        required: true,
+        message: "Base URL is missing.",
+        hint:
+          "Set `POCKETBASE_CLI_BASE_URL` in `.env`, run `config set base_url <url>`, or pass `--base-url <url>`.",
+        data: { resolved_base_url: null }
+      })
+    );
+  }
+
+  if (options.requireAuth) {
+    if (authMatchesTarget) {
+      checks.push(
+        createCheck({
+          name: "auth",
+          status: "pass",
+          required: true,
+          message: "Saved auth matches the resolved target.",
+          data: {
+            base_url: savedAuthBaseUrl,
+            collection: savedAuthCollection
+          }
+        })
+      );
+    } else {
+      missingPrerequisites.push("auth_login");
+      recommendations.push(
+        "Run `auth login` again so the saved auth token matches the resolved base URL and collection."
+      );
+      checks.push(
+        createCheck({
+          name: "auth",
+          status: "fail",
+          required: true,
+          message: savedAuthPresent
+            ? "Saved auth does not match the resolved target."
+            : "Saved auth token is missing.",
+          hint:
+            "Run `auth login` again after setting the intended `base_url` and `auth_collection`.",
+          data: {
+            saved_auth_present: savedAuthPresent,
+            saved_auth_base_url: savedAuthBaseUrl,
+            saved_auth_collection: savedAuthCollection
+          }
+        })
+      );
+    }
+  } else {
+    checks.push(
+      createCheck({
+        name: "auth",
+        status: authMatchesTarget ? "pass" : "skip",
+        required: false,
+        message: savedAuthPresent
+          ? authMatchesTarget
+            ? "Saved auth is available for the resolved target."
+            : "Saved auth exists but targets a different base URL or collection."
+          : "Saved auth is optional for this preflight run.",
+        data: {
+          saved_auth_present: savedAuthPresent,
+          saved_auth_matches_target: authMatchesTarget
+        }
+      })
+    );
+  }
+
+  let health: Record<string, unknown> | null = null;
+  if (options.skipHealth || !resolvedBaseUrl) {
+    health = {
+      status: options.skipHealth ? "skip" : "fail",
+      message: options.skipHealth
+        ? "Health probe skipped."
+        : "Health probe skipped because base URL is missing.",
+      data: null
+    };
+    checks.push(
+      createCheck({
+        name: "health",
+        status: options.skipHealth ? "skip" : "fail",
+        required: !options.skipHealth && Boolean(resolvedBaseUrl),
+        message: health.message as string
+      })
+    );
+  } else {
+    health = await probeHealth(context, resolvedBaseUrl);
+    checks.push(
+      createCheck({
+        name: "health",
+        status: health.status as PreflightStatus,
+        required: true,
+        message: String(health.message),
+        data: health.data
+      })
+    );
+  }
+
+  const ready = checks.every((check) => {
+    const status = check.status as PreflightStatus;
+    return check.required !== true || status === "pass";
+  });
+
+  return {
+    ready,
+    require_auth: Boolean(options.requireAuth),
+    skipped_health: Boolean(options.skipHealth),
+    resolved_base_url: resolvedBaseUrl,
+    resolved_auth_collection: resolvedCollection,
+    missing_prerequisites: missingPrerequisites,
+    recommendations,
+    saved_auth: {
+      present: savedAuthPresent,
+      target_match: authMatchesTarget,
+      base_url: savedAuthBaseUrl,
+      collection: savedAuthCollection
+    },
+    checks,
+    health
+  };
+}
+
 export function createPreflightDefinition(context: AppContext): CommandDefinition {
   return {
     name: "preflight",
@@ -138,161 +299,13 @@ export function createPreflightDefinition(context: AppContext): CommandDefinitio
             historyParts.push("--skip-health");
           }
           await recordCommand(context, historyParts.join(" "));
-
-          const resolvedBaseUrl = resolveBaseUrl(context, options.baseUrl);
-          const resolvedCollection = resolveAuthCollection(context, options.collection);
-          const savedAuthBaseUrl = normalizeBaseUrl(context.state.remoteAuth.base_url ?? null);
-          const savedAuthCollection = String(context.state.remoteAuth.collection ?? "_superusers");
-          const savedAuthPresent = context.state.hasRemoteAuth();
-          const authMatchesTarget =
-            savedAuthPresent &&
-            savedAuthBaseUrl === resolvedBaseUrl &&
-            savedAuthCollection === resolvedCollection;
-
-          const checks: Record<string, unknown>[] = [];
-          const missingPrerequisites: string[] = [];
-          const recommendations: string[] = [];
-
-          if (resolvedBaseUrl) {
-            checks.push(
-              createCheck({
-                name: "base_url",
-                status: "pass",
-                required: true,
-                message: "Base URL is configured.",
-                data: { resolved_base_url: resolvedBaseUrl }
-              })
-            );
-          } else {
-            missingPrerequisites.push("base_url");
-            recommendations.push(
-              "Set `POCKETBASE_CLI_BASE_URL` in `.env`, run `config set base_url <url>`, or pass `--base-url <url>`."
-            );
-            checks.push(
-              createCheck({
-                name: "base_url",
-                status: "fail",
-                required: true,
-                message: "Base URL is missing.",
-                hint:
-                  "Set `POCKETBASE_CLI_BASE_URL` in `.env`, run `config set base_url <url>`, or pass `--base-url <url>`.",
-                data: { resolved_base_url: null }
-              })
-            );
-          }
-
-          if (options.requireAuth) {
-            if (authMatchesTarget) {
-              checks.push(
-                createCheck({
-                  name: "auth",
-                  status: "pass",
-                  required: true,
-                  message: "Saved auth matches the resolved target.",
-                  data: {
-                    base_url: savedAuthBaseUrl,
-                    collection: savedAuthCollection
-                  }
-                })
-              );
-            } else {
-              missingPrerequisites.push("auth_login");
-              recommendations.push(
-                "Run `auth login` again so the saved auth token matches the resolved base URL and collection."
-              );
-              checks.push(
-                createCheck({
-                  name: "auth",
-                  status: "fail",
-                  required: true,
-                  message: savedAuthPresent
-                    ? "Saved auth does not match the resolved target."
-                    : "Saved auth token is missing.",
-                  hint:
-                    "Run `auth login` again after setting the intended `base_url` and `auth_collection`.",
-                  data: {
-                    saved_auth_present: savedAuthPresent,
-                    saved_auth_base_url: savedAuthBaseUrl,
-                    saved_auth_collection: savedAuthCollection
-                  }
-                })
-              );
-            }
-          } else {
-            checks.push(
-              createCheck({
-                name: "auth",
-                status: authMatchesTarget ? "pass" : "skip",
-                required: false,
-                message: savedAuthPresent
-                  ? authMatchesTarget
-                    ? "Saved auth is available for the resolved target."
-                    : "Saved auth exists but targets a different base URL or collection."
-                  : "Saved auth is optional for this preflight run.",
-                data: {
-                  saved_auth_present: savedAuthPresent,
-                  saved_auth_matches_target: authMatchesTarget
-                }
-              })
-            );
-          }
-
-          let health: Record<string, unknown> | null = null;
-          if (options.skipHealth || !resolvedBaseUrl) {
-            health = {
-              status: options.skipHealth ? "skip" : "fail",
-              message: options.skipHealth
-                ? "Health probe skipped."
-                : "Health probe skipped because base URL is missing.",
-              data: null
-            };
-            checks.push(
-              createCheck({
-                name: "health",
-                status: options.skipHealth ? "skip" : "fail",
-                required: !options.skipHealth && Boolean(resolvedBaseUrl),
-                message: health.message as string
-              })
-            );
-          } else {
-            health = await probeHealth(context, resolvedBaseUrl);
-            checks.push(
-              createCheck({
-                name: "health",
-                status: health.status as PreflightStatus,
-                required: true,
-                message: String(health.message),
-                data: health.data
-              })
-            );
-          }
-
-          const ready = checks.every((check) => {
-            const status = check.status as PreflightStatus;
-            return check.required !== true || status === "pass";
-          });
+          const payload = await runPreflightCheck(context, options);
 
           emitSuccess({
             jsonOutput: context.jsonMode,
             action: "preflight",
-            message: ready ? "Preflight check passed" : "Preflight check requires attention",
-            data: {
-              ready,
-              require_auth: Boolean(options.requireAuth),
-              skipped_health: Boolean(options.skipHealth),
-              resolved_base_url: resolvedBaseUrl,
-              resolved_auth_collection: resolvedCollection,
-              missing_prerequisites: missingPrerequisites,
-              recommendations,
-              saved_auth: {
-                present: savedAuthPresent,
-                target_match: authMatchesTarget,
-                base_url: savedAuthBaseUrl,
-                collection: savedAuthCollection
-              },
-              checks,
-              health
-            }
+            message: payload.ready ? "Preflight check passed" : "Preflight check requires attention",
+            data: payload
           });
         })
   };

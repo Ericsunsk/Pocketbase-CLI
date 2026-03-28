@@ -62,3 +62,21 @@ export async function saveRemoteAuthResult(
   });
   await saveContextState(context);
 }
+
+export function redactAuthResult<TData>(
+  result: RemoteResult<TData>
+): RemoteResult<TData | Record<string, unknown>> {
+  const payload =
+    result.data && typeof result.data === "object" && !Array.isArray(result.data)
+      ? { ...(result.data as Record<string, unknown>) }
+      : null;
+
+  if (payload && typeof payload.token === "string") {
+    payload.token = "********";
+  }
+
+  return {
+    ...result,
+    data: (payload ?? result.data) as TData | Record<string, unknown>
+  };
+}

@@ -14,7 +14,8 @@ import { createArgumentParameter, createOptionParameter } from "../contract/meta
 import { emitError, emitSuccess } from "../core/output";
 import { PocketBaseRemoteClient, PocketBaseRemoteError } from "../http/remote-client";
 import { readSecretFromStdin } from "../input/json-input";
-import { saveRemoteAuthResult } from "./auth-support";
+import { redactAuthResult, saveRemoteAuthResult } from "./auth-support";
+import { runPreflightCheck } from "./preflight";
 import { createAuthLoginBrowserDefinition } from "./auth-browser";
 import { LOGIN_BASE_URL_REQUIRED_MESSAGE, buildRemoteClient, handleRemoteError, requireBaseUrl } from "./support";
 
@@ -206,7 +207,12 @@ function createAuthLoginDefinition(context: AppContext): CommandDefinition {
                 jsonOutput: context.jsonMode,
                 action: "auth.login",
                 message: "Remote auth login successful",
-                data: result
+                data: {
+                  auth: redactAuthResult(result),
+                  preflight: await runPreflightCheck(context, {
+                    requireAuth: true
+                  })
+                }
               });
             } catch (error) {
               if (error instanceof PocketBaseRemoteError) {
@@ -362,7 +368,9 @@ function createAuthRefreshDefinition(context: AppContext): CommandDefinition {
               jsonOutput: context.jsonMode,
               action: "auth.refresh",
               message: "Remote auth refreshed",
-              data: result
+              data: {
+                auth: redactAuthResult(result)
+              }
             });
           } catch (error) {
             if (error instanceof PocketBaseRemoteError) {
