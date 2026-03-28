@@ -165,14 +165,17 @@ export function createPreflightDefinition(context: AppContext): CommandDefinitio
             );
           } else {
             missingPrerequisites.push("base_url");
-            recommendations.push("Run `config set base_url <url>` or pass `--base-url <url>`.");
+            recommendations.push(
+              "Set `POCKETBASE_CLI_BASE_URL` in `.env`, run `config set base_url <url>`, or pass `--base-url <url>`."
+            );
             checks.push(
               createCheck({
                 name: "base_url",
                 status: "fail",
                 required: true,
                 message: "Base URL is missing.",
-                hint: "Run `config set base_url <url>` or pass `--base-url <url>`.",
+                hint:
+                  "Set `POCKETBASE_CLI_BASE_URL` in `.env`, run `config set base_url <url>`, or pass `--base-url <url>`.",
                 data: { resolved_base_url: null }
               })
             );

@@ -69,14 +69,31 @@ npm i -g pocketbase-cli
 ## 快速开始
 
 ```sh
-node dist/bin.js config set base_url https://pb.example.com
-node dist/bin.js config set auth_collection _superusers
+cp .env.example .env
+# 编辑 .env，填写 POCKETBASE_CLI_BASE_URL
+
 printf 'Secret123\n' | node dist/bin.js auth login --password-stdin admin@example.com
 node dist/bin.js --json preflight --require-auth
 node dist/bin.js --json info
 node dist/bin.js schema --json
 node dist/bin.js records list users --all
 ```
+
+`.env` 也可以放 `auth login` 需要的默认认证信息：
+
+```env
+POCKETBASE_CLI_BASE_URL=https://pb.example.com
+POCKETBASE_CLI_AUTH_IDENTITY=admin@example.com
+POCKETBASE_CLI_AUTH_PASSWORD=Secret123
+```
+
+然后可以直接执行：
+
+```sh
+node dist/bin.js auth login
+```
+
+优先级保持为：命令行参数 > 持久化 `config set ...` > `.env` 默认值 > 已保存登录态目标。
 
 不带子命令直接运行会进入 REPL：
 

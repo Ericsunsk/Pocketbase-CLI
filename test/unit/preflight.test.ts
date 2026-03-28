@@ -5,6 +5,7 @@ import { SessionState, SessionStore } from "../../src/core/session-store";
 
 function createContext(options?: {
   baseUrl?: string;
+  envBaseUrl?: string;
   authBaseUrl?: string;
   authCollection?: string;
 }) {
@@ -25,6 +26,7 @@ function createContext(options?: {
   return {
     version: "0.1.0",
     jsonMode: true,
+    envConfig: options?.envBaseUrl ? { base_url: options.envBaseUrl } : {},
     suppressHistory: false,
     onStateSaved: undefined,
     store: new SessionStore("/tmp/pocketbase-cli-preflight-test-session.json"),
@@ -121,5 +123,44 @@ describe("preflight command", () => {
       ])
     );
     expect(context.state.commandHistory.at(-1)).toBe("preflight --require-auth --skip-health");
+  });
+
+  it("accepts the base URL from env config when no saved config exists", async () => {
+    const context = createContext({
+      envBaseUrl: "https://pb.example.com",
+      authBaseUrl: "https://pb.example.com"
+    });
+    const cli = createCli(context);
+    const writes: string[] = [];
+
+    vi.spyOn(process.stdout, "write").mockImplementation((chunk: string | Uint8Array) => {
+      writes.push(String(chunk));
+      return true;
+    });
+
+    try {
+      await cli.parseAsync([
+        "node",
+        "pocketbase-cli",
+        "--json",
+        "preflight",
+        "--require-auth",
+        "--skip-health"
+      ]);
+    } finally {
+      vi.restoreAllMocks();
+    }
+
+    const payload = JSON.parse(writes.join("").trim()) as {
+      message: string;
+      result: {
+        ready: boolean;
+        resolved_base_url: string | null;
+      };
+    };
+
+    expect(payload.message).toBe("Preflight check passed");
+    expect(payload.result.ready).toBe(true);
+    expect(payload.result.resolved_base_url).toBe("https://pb.example.com");
   });
 });

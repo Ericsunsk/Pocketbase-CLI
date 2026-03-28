@@ -69,6 +69,11 @@ export function createInfoDefinition(context: AppContext): CommandDefinition {
           const payload = {
             mode: "remote",
             active_config: context.state.config,
+            env_config: {
+              base_url: context.envConfig?.base_url ?? null,
+              auth_identity: context.envConfig?.auth_identity ?? null,
+              auth_password_present: Boolean(context.envConfig?.auth_password)
+            },
             resolved_base_url: resolveBaseUrl(context),
             resolved_auth_collection: resolveAuthCollection(context),
             remote_auth: {

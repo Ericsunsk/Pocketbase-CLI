@@ -6,6 +6,7 @@ import {
   AppContext,
   buildAuthStatusPayload,
   recordCommand,
+  resolveAuthCollection,
   saveContextState
 } from "../app/context";
 import type { CommandDefinition } from "../contract/command-registry";
@@ -114,7 +115,8 @@ function createAuthLoginDefinition(context: AppContext): CommandDefinition {
               message: LOGIN_BASE_URL_REQUIRED_MESSAGE
             });
 
-            const trimmedIdentity = identity?.trim();
+            const trimmedIdentity =
+              identity?.trim() || context.envConfig?.auth_identity?.trim() || undefined;
             if (!trimmedIdentity) {
               emitError({
                 jsonOutput: context.jsonMode,
@@ -122,11 +124,11 @@ function createAuthLoginDefinition(context: AppContext): CommandDefinition {
                 message: "auth login requires an identity (for example admin@example.com).",
                 errorType: "invalid_input",
                 hint:
-                  "Use `auth login <identity> --password-stdin` for automation-safe input, or run `auth login` for interactive prompts."
+                  "Use `auth login <identity> --password-stdin`, set `POCKETBASE_CLI_AUTH_IDENTITY` in `.env`, or run `auth login` for interactive prompts."
               });
             }
 
-            let resolvedPassword = password;
+            let resolvedPassword = password ?? context.envConfig?.auth_password ?? undefined;
             if (options.passwordStdin) {
               if (password !== undefined) {
                 emitError({
@@ -154,12 +156,11 @@ function createAuthLoginDefinition(context: AppContext): CommandDefinition {
                 message: "auth login requires a password argument or `--password-stdin`.",
                 errorType: "invalid_input",
                 hint:
-                  "Use `auth login <identity> --password-stdin` for automation-safe input, or run `auth login` for interactive prompts."
+                  "Use `auth login <identity> --password-stdin`, set `POCKETBASE_CLI_AUTH_PASSWORD` in `.env`, or run `auth login` for interactive prompts."
               });
             }
 
-            const resolvedCollection =
-              options.collection ?? context.state.config.auth_collection ?? "_superusers";
+            const resolvedCollection = options.collection ?? resolveAuthCollection(context);
 
             const historyParts = ["auth", "login"];
             if (options.baseUrl) {

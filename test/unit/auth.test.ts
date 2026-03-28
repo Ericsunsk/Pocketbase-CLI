@@ -28,6 +28,9 @@ function captureStdout(): {
 describe("auth commands", () => {
   beforeEach(() => {
     process.env.POCKETBASE_CLI_STATE_DIR = "/tmp/pocketbase-cli-auth-tests";
+    delete process.env.POCKETBASE_CLI_BASE_URL;
+    delete process.env.POCKETBASE_CLI_AUTH_IDENTITY;
+    delete process.env.POCKETBASE_CLI_AUTH_PASSWORD;
     vi.restoreAllMocks();
   });
 
@@ -206,5 +209,40 @@ describe("auth commands", () => {
     ).rejects.toBeInstanceOf(CliExitError);
 
     capture.restore();
+  });
+
+  it("logs in with env-provided target and credentials", async () => {
+    process.env.POCKETBASE_CLI_BASE_URL = "https://pb.example.com";
+    process.env.POCKETBASE_CLI_AUTH_IDENTITY = "admin@example.com";
+    process.env.POCKETBASE_CLI_AUTH_PASSWORD = "Secret123";
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        text: async () =>
+          JSON.stringify({
+            token: "secret-token",
+            record: { id: "superuser_1", email: "admin@example.com" }
+          })
+      })
+    );
+
+    const context = await createAppContext();
+    const cli = createCli(context);
+    const capture = captureStdout();
+
+    try {
+      await cli.parseAsync(["node", "pocketbase-cli", "--json", "auth", "login"]);
+    } finally {
+      capture.restore();
+    }
+
+    expect(context.state.hasRemoteAuth()).toBe(true);
+    expect(context.state.remoteAuth.base_url).toBe("https://pb.example.com");
+    expect(context.state.remoteAuth.collection).toBe("_superusers");
+    expect(context.state.commandHistory.at(-1)).toBe("auth login admin@example.com ********");
   });
 });

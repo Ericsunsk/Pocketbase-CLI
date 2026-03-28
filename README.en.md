@@ -69,14 +69,31 @@ npm i -g pocketbase-cli
 ## Quick Start
 
 ```sh
-node dist/bin.js config set base_url https://pb.example.com
-node dist/bin.js config set auth_collection _superusers
+cp .env.example .env
+# edit .env and set POCKETBASE_CLI_BASE_URL
+
 printf 'Secret123\n' | node dist/bin.js auth login --password-stdin admin@example.com
 node dist/bin.js --json preflight --require-auth
 node dist/bin.js --json info
 node dist/bin.js schema --json
 node dist/bin.js records list users --all
 ```
+
+`.env` can also hold the default auth settings used by `auth login`:
+
+```env
+POCKETBASE_CLI_BASE_URL=https://pb.example.com
+POCKETBASE_CLI_AUTH_IDENTITY=admin@example.com
+POCKETBASE_CLI_AUTH_PASSWORD=Secret123
+```
+
+Then you can run:
+
+```sh
+node dist/bin.js auth login
+```
+
+Priority remains: command-line args > persisted `config set ...` values > `.env` defaults > saved auth target.
 
 Run without a subcommand to enter REPL mode:
 

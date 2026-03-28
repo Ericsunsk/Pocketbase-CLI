@@ -8,9 +8,9 @@ import {
 } from "../http/remote-client";
 
 export const RECORD_BASE_URL_REQUIRED_MESSAGE =
-  "Base URL is required. Run `config set base_url <url>` first.";
+  "Base URL is required. Set `POCKETBASE_CLI_BASE_URL` in `.env` or run `config set base_url <url>` first.";
 export const LOGIN_BASE_URL_REQUIRED_MESSAGE =
-  "Base URL is required. Pass `--base-url` or persist it with `config set base_url <url>`.";
+  "Base URL is required. Pass `--base-url`, set `POCKETBASE_CLI_BASE_URL` in `.env`, or persist it with `config set base_url <url>`.";
 export const FILE_TOKEN_RESPONSE_ERROR_MESSAGE =
   "File token response did not include a usable token.";
 
@@ -40,9 +40,10 @@ export function buildRemoteClient(
       jsonOutput: context.jsonMode,
       action,
       message:
-        "Remote base URL is not configured. Run `config set base_url <url>` or `auth login --base-url <url>` first.",
+        "Remote base URL is not configured. Set `POCKETBASE_CLI_BASE_URL` in `.env`, run `config set base_url <url>`, or use `auth login --base-url <url>` first.",
       errorType: "missing_prerequisite",
-      hint: "Set a base URL with `config set base_url <url>` or pass `auth login --base-url <url>`.",
+      hint:
+        "Set `POCKETBASE_CLI_BASE_URL` in `.env`, persist a base URL with `config set base_url <url>`, or pass `auth login --base-url <url>`.",
       missingPrerequisite: "base_url"
     });
   }
@@ -101,7 +102,8 @@ export function requireBaseUrl(
       action: options?.action ?? "remote",
       message: options?.message ?? RECORD_BASE_URL_REQUIRED_MESSAGE,
       errorType: "missing_prerequisite",
-      hint: "Persist a PocketBase base URL with `config set base_url <url>` or provide it explicitly.",
+      hint:
+        "Set `POCKETBASE_CLI_BASE_URL` in `.env`, persist a PocketBase base URL with `config set base_url <url>`, or provide it explicitly.",
       missingPrerequisite: "base_url"
     });
   }

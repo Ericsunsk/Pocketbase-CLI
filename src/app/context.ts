@@ -1,10 +1,18 @@
 import { SessionState, SessionStore } from "../core/session-store";
+import { readEnvConfig } from "../input/validators";
+
+export interface EnvConfig {
+  base_url?: string | null;
+  auth_identity?: string | null;
+  auth_password?: string | null;
+}
 
 export interface AppContext {
   version: string;
   jsonMode: boolean;
   suppressHistory?: boolean;
   onStateSaved?: (() => void) | undefined;
+  envConfig?: EnvConfig;
   store: SessionStore;
   state: SessionState;
 }
@@ -12,12 +20,14 @@ export interface AppContext {
 export async function createAppContext(): Promise<AppContext> {
   const store = new SessionStore();
   const state = await store.load();
+  const envConfig = readEnvConfig();
 
   return {
     version: "0.1.0",
     jsonMode: process.argv.includes("--json"),
     suppressHistory: false,
     onStateSaved: undefined,
+    envConfig,
     store,
     state
   };
@@ -91,6 +101,7 @@ export function resolveBaseUrl(context: AppContext, baseUrl?: string | null): st
   const resolved =
     baseUrl ??
     context.state.config.base_url ??
+    context.envConfig?.base_url ??
     context.state.remoteAuth.base_url;
 
   if (!resolved) {
@@ -115,6 +126,10 @@ export function buildAuthStatusPayload(context: AppContext): Record<string, unkn
   return {
     authenticated: context.state.hasRemoteAuth(),
     configured_base_url: context.state.config.base_url ?? null,
+    env_base_url: context.envConfig?.base_url ?? null,
+    env_auth_identity: context.envConfig?.auth_identity ?? null,
+    env_auth_password_present: Boolean(context.envConfig?.auth_password),
+    resolved_base_url: resolveBaseUrl(context),
     configured_auth_collection: context.state.config.auth_collection ?? "_superusers",
     active_base_url: remoteAuth.base_url ?? null,
     active_collection: remoteAuth.collection ?? null,
