@@ -15,6 +15,7 @@ import { emitError, emitSuccess } from "../core/output";
 import { PocketBaseRemoteClient, PocketBaseRemoteError } from "../http/remote-client";
 import { readSecretFromStdin } from "../input/json-input";
 import { saveRemoteAuthResult } from "./auth-support";
+import { createAuthLoginBrowserDefinition } from "./auth-browser";
 import { LOGIN_BASE_URL_REQUIRED_MESSAGE, buildRemoteClient, handleRemoteError, requireBaseUrl } from "./support";
 
 function redactCommand(parts: string[], sensitiveIndexes?: Set<number>): string {
@@ -384,6 +385,7 @@ export function createAuthDefinition(context: AppContext): CommandDefinition {
     confirmationRequired: false,
     children: [
       createAuthLoginDefinition(context),
+      createAuthLoginBrowserDefinition(context),
       createAuthLogoutDefinition(context),
       createAuthStatusDefinition(context),
       createAuthWhoamiDefinition(context),

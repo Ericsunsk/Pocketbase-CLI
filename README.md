@@ -54,6 +54,8 @@ Then you can run:
 
 ```sh
 node dist/bin.js auth login
+# or:
+node dist/bin.js auth login-browser
 ```
 
 Priority remains: command-line args > persisted `config set ...` values > `.env` defaults > saved auth target.

@@ -91,6 +91,8 @@ POCKETBASE_CLI_AUTH_PASSWORD=Secret123
 
 ```sh
 node dist/bin.js auth login
+# 或：
+node dist/bin.js auth login-browser
 ```
 
 优先级保持为：命令行参数 > 持久化 `config set ...` > `.env` 默认值 > 已保存登录态目标。

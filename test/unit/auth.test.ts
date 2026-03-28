@@ -3,6 +3,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createCli } from "../../src/cli";
 import { createAppContext } from "../../src/app/context";
 import { CliExitError } from "../../src/core/output";
+import { PocketBaseRemoteClient } from "../../src/http/remote-client";
+
+const REAL_FETCH = globalThis.fetch;
 
 function captureStdout(): {
   output: string[];
@@ -25,12 +28,36 @@ function captureStdout(): {
   };
 }
 
+function captureStderr(): {
+  output: string[];
+  restore: () => void;
+} {
+  const output: string[] = [];
+  const original = process.stderr.write.bind(process.stderr);
+
+  vi.spyOn(process.stderr, "write").mockImplementation((chunk: string | Uint8Array) => {
+    output.push(String(chunk));
+    return true;
+  });
+
+  return {
+    output,
+    restore: () => {
+      (process.stderr.write as unknown as ReturnType<typeof vi.spyOn>).mockRestore?.();
+      process.stderr.write = original as typeof process.stderr.write;
+    }
+  };
+}
+
 describe("auth commands", () => {
   beforeEach(() => {
     process.env.POCKETBASE_CLI_STATE_DIR = "/tmp/pocketbase-cli-auth-tests";
     delete process.env.POCKETBASE_CLI_BASE_URL;
     delete process.env.POCKETBASE_CLI_AUTH_IDENTITY;
     delete process.env.POCKETBASE_CLI_AUTH_PASSWORD;
+    if (REAL_FETCH) {
+      globalThis.fetch = REAL_FETCH;
+    }
     vi.restoreAllMocks();
   });
 
@@ -244,5 +271,84 @@ describe("auth commands", () => {
     expect(context.state.remoteAuth.base_url).toBe("https://pb.example.com");
     expect(context.state.remoteAuth.collection).toBe("_superusers");
     expect(context.state.commandHistory.at(-1)).toBe("auth login admin@example.com ********");
+  });
+
+  it("serves a browser login page and persists auth state after form submit", async () => {
+    process.env.POCKETBASE_CLI_BASE_URL = "https://pb.example.com";
+    process.env.POCKETBASE_CLI_AUTH_IDENTITY = "admin@example.com";
+
+    vi.spyOn(PocketBaseRemoteClient.prototype, "login").mockResolvedValue({
+      method: "POST",
+      url: "https://pb.example.com/api/collections/_superusers/auth-with-password",
+      status: 200,
+      data: {
+        token: "secret-token",
+        record: { id: "superuser_1", email: "admin@example.com" }
+      }
+    });
+
+    const context = await createAppContext();
+    const cli = createCli(context);
+    const stdout = captureStdout();
+    const stderr = captureStderr();
+
+    try {
+      const commandPromise = cli.parseAsync([
+        "node",
+        "pocketbase-cli",
+        "--json",
+        "auth",
+        "login-browser",
+        "--no-open",
+        "--timeout",
+        "5"
+      ]);
+
+      let launchUrl: string | null = null;
+      for (let attempt = 0; attempt < 50 && !launchUrl; attempt += 1) {
+        const combined = stderr.output.join("");
+        const match = combined.match(/http:\/\/127\.0\.0\.1:\d+\/login\/[a-f0-9]+/u);
+        launchUrl = match?.[0] ?? null;
+        if (!launchUrl) {
+          await new Promise((resolve) => setTimeout(resolve, 20));
+        }
+      }
+
+      expect(launchUrl).toBeTruthy();
+
+      const formPage = await fetch(String(launchUrl));
+      const html = await formPage.text();
+      const stateMatch = html.match(/name="state" value="([^"]+)"/u);
+      expect(stateMatch?.[1]).toBeTruthy();
+
+      const response = await fetch(String(launchUrl), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: new URLSearchParams({
+          state: String(stateMatch?.[1]),
+          identity: "admin@example.com",
+          password: "Secret123"
+        })
+      });
+
+      expect(response.status).toBe(200);
+      await commandPromise;
+    } finally {
+      stdout.restore();
+      stderr.restore();
+    }
+
+    expect(context.state.hasRemoteAuth()).toBe(true);
+    expect(context.state.remoteAuth.base_url).toBe("https://pb.example.com");
+    expect(context.state.commandHistory.at(-1)).toBe("auth login-browser --no-open --timeout 5");
+
+    const payload = JSON.parse(stdout.output.join("").trim()) as {
+      action: string;
+      message: string;
+    };
+    expect(payload.action).toBe("auth.login-browser");
+    expect(payload.message).toBe("Remote auth login successful");
   });
 });
