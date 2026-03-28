@@ -18,6 +18,21 @@ import { redactAuthResult, saveRemoteAuthResult } from "./auth-support";
 import { runPreflightCheck } from "./preflight";
 import { LOGIN_BASE_URL_REQUIRED_MESSAGE, requireBaseUrl } from "./support";
 
+const POCKETBASE_LOGO_SVG = `<svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="25.536" y="13.4861" width="1.71467" height="16.7338" transform="rotate(45.9772 25.536 13.4861)" fill="white"/><path d="M26 14H36.8C37.4628 14 38 14.5373 38 15.2V36.8C38 37.4628 37.4628 38 36.8 38H15.2C14.5373 38 14 37.4628 14 36.8V26" fill="white"/><path d="M26 14H36.8C37.4628 14 38 14.5373 38 15.2V36.8C38 37.4628 38 15.2V36.8C38 37.4628 37.4628 38 36.8 38H15.2C14.5373 38 14 37.4628 14 36.8V26" stroke="#16161a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M26 14V3.2C26 2.53726 25.4628 2 24.8 2H3.2C2.53726 2 2 2.53726 2 3.2V24.8C2 25.4628 2.53726 26 3.2 26H14" fill="white"/><path d="M26 14V3.2C26 2.53726 25.4628 2 24.8 2H3.2C2.53726 2 2 2.53726 2 3.2V24.8C2 25.4628 2.53726 26 3.2 26H14" stroke="#16161a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 20C9.44772 20 9 19.5523 9 19V8C9 7.44772 9.44772 7 10 7H13.7531C14.4801 7 15.1591 7.07311 15.7901 7.21932C16.4348 7.35225 16.9904 7.58487 17.4568 7.91718C17.9369 8.2362 18.3141 8.6682 18.5885 9.21319C18.8628 9.74489 19 10.4029 19 11.1871C19 11.9448 18.856 12.6028 18.5679 13.161C18.2936 13.7193 17.9163 14.1779 17.4362 14.5368C16.9561 14.8957 16.4005 15.1616 15.7695 15.3344C15.1385 15.5072 14.4664 15.5936 13.7531 15.5936H13.0247C12.4724 15.5936 12.0247 16.0413 12.0247 16.5936V19C12.0247 19.5523 11.577 20 11.0247 20H10ZM12.0247 12.2607C12.0247 12.813 12.4724 13.2607 13.0247 13.2607H13.5679C15.214 13.2607 16.037 12.5695 16.037 11.1871C16.037 10.5092 15.8244 10.0307 15.3992 9.75153C14.9877 9.47239 14.3772 9.33282 13.5679 9.33282H13.0247C12.4724 9.33282 12.0247 9.78054 12.0247 10.3328V12.2607Z" fill="#16161a"/><path d="M22 33C21.4477 33 21 32.5523 21 32V21C21 20.4477 21.4477 20 22 20H25.4877C26.1844 20 26.8265 20.0532 27.4139 20.1595C28.015 20.2526 28.5342 20.4254 28.9713 20.6779C29.4085 20.9305 29.75 21.2628 29.9959 21.6748C30.2555 22.0869 30.3852 22.6053 30.3852 23.2301C30.3852 23.5225 30.3374 23.8149 30.2418 24.1074C30.1598 24.3998 30.0232 24.6723 29.832 24.9248C29.6407 25.1774 29.4016 25.4034 29.1148 25.6028C28.837 25.7958 28.5081 25.939 28.1279 26.0323C28.1058 26.0378 28.0902 26.0575 28.0902 26.0802V26.0802C28.0902 26.1039 28.1073 26.1242 28.1306 26.1286C29.0669 26.3034 29.7774 26.6332 30.2623 27.1181C30.7541 27.6099 31 28.2945 31 29.1718C31 29.8364 30.8702 30.408 30.6107 30.8865C30.3511 31.365 29.9891 31.7638 29.5246 32.0828C29.0601 32.3885 28.5137 32.6212 27.8852 32.7807C27.2705 32.9269 26.6011 33 25.8771 33H22ZM24.0123 24.2239C24.0123 24.7762 24.46 25.2239 25.0123 25.2239H25.3443C26.082 25.2239 26.6148 25.0844 26.9426 24.8052C27.2705 24.5261 27.4344 24.1339 27.4344 23.6288C27.4344 23.1503 27.2637 22.8113 26.9221 22.612C26.5943 22.3993 26.0751 22.2929 25.3648 22.2929H25.0123C24.46 22.2929 24.0123 22.7407 24.0123 23.2929V24.2239ZM24.0123 29.7071C24.0123 30.2593 24.46 30.7071 25.0123 30.7071H25.6311C27.2432 30.7071 28.0492 30.1222 28.0492 28.9525C28.0492 28.3809 27.8511 27.9688 27.4549 27.7163C27.0724 27.4637 26.4645 27.3374 25.6311 27.3374H25.0123C24.46 27.3374 24.0123 27.7851 24.0123 28.3374V29.7071Z" fill="#16161a"/></svg>`;
+
+interface AuthMethodsPayload {
+  password?: {
+    identityFields?: string[];
+    enabled?: boolean;
+  };
+  mfa?: {
+    enabled?: boolean;
+  };
+  otp?: {
+    enabled?: boolean;
+  };
+}
+
 function escapeHtml(value: string): string {
   return value
     .replace(/&/gu, "&amp;")
@@ -27,16 +42,45 @@ function escapeHtml(value: string): string {
     .replace(/'/gu, "&#39;");
 }
 
+function titleCaseWords(value: string): string {
+  return value
+    .split(/\s+/u)
+    .filter(Boolean)
+    .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function formatIdentityLabel(identityFields: string[]): string {
+  if (identityFields.length === 0) {
+    return "Identity";
+  }
+
+  const words = identityFields.map((field) => titleCaseWords(field.replace(/[_-]+/gu, " ")));
+  if (words.length === 1) {
+    return words[0];
+  }
+
+  return `${words.slice(0, -1).join(" or ")} or ${words.at(-1)}`;
+}
+
+function getPasswordResetUrl(baseUrl: string): string {
+  return `${baseUrl.replace(/\/+$/u, "")}/_/#/request-password-reset`;
+}
+
 function renderLoginPage(options: {
   baseUrl: string;
   collection: string;
   state: string;
   identity?: string;
   error?: string;
+  identityLabel: string;
+  identityType: "email" | "text";
+  submitLabel: string;
+  passwordResetUrl: string;
 }): string {
   const identity = options.identity ? escapeHtml(options.identity) : "";
   const error = options.error
-    ? `<p style="margin:0 0 16px;padding:12px 14px;border-radius:10px;background:#fff1f2;color:#9f1239;border:1px solid #fecdd3;">${escapeHtml(options.error)}</p>`
+    ? `<div class="help-block help-block-error">${escapeHtml(options.error)}</div>`
     : "";
 
   return `<!doctype html>
@@ -52,84 +96,151 @@ function renderLoginPage(options: {
       min-height: 100vh;
       display: grid;
       place-items: center;
-      background:
-        radial-gradient(circle at top left, #dbeafe 0%, transparent 32%),
-        radial-gradient(circle at bottom right, #fce7f3 0%, transparent 28%),
-        linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%);
+      background: linear-gradient(180deg, #f5f5f7 0%, #eff0f4 100%);
       font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      color: #0f172a;
+      color: #16161a;
     }
-    .card {
+    .page {
       width: min(92vw, 420px);
-      padding: 28px;
-      border-radius: 20px;
-      background: rgba(255, 255, 255, 0.92);
-      box-shadow: 0 20px 60px rgba(15, 23, 42, 0.14);
-      border: 1px solid rgba(148, 163, 184, 0.2);
-      backdrop-filter: blur(16px);
+      margin: 32px auto;
     }
-    h1 {
-      margin: 0 0 8px;
-      font-size: 24px;
+    .brand {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      margin-bottom: 22px;
+      color: #16161a;
+      font-size: 28px;
+      line-height: 1;
     }
-    p.meta {
-      margin: 0 0 18px;
-      color: #475569;
-      line-height: 1.5;
+    .brand strong {
+      font-weight: 800;
+    }
+    .brand svg {
+      width: 40px;
+      height: 40px;
+    }
+    .panel {
+      background: #fff;
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 18px 48px rgba(22, 22, 26, 0.08);
+      border: 1px solid rgba(22, 22, 26, 0.06);
+    }
+    .content {
+      text-align: center;
+      margin-bottom: 18px;
+    }
+    .content h4 {
+      margin: 0 0 10px;
+      font-size: 22px;
+      font-weight: 700;
+      color: #16161a;
+    }
+    .meta {
+      margin: 0;
+      color: #7d7f87;
       font-size: 14px;
+      line-height: 1.5;
     }
-    code {
-      padding: 2px 6px;
-      border-radius: 999px;
-      background: #e2e8f0;
-      font-size: 12px;
-    }
-    label {
+    .block {
       display: block;
-      margin: 14px 0 6px;
+    }
+    .form-field {
+      margin-bottom: 14px;
+    }
+    .form-field label {
+      display: block;
+      margin: 0 0 7px;
       font-size: 14px;
       font-weight: 600;
+      color: #2a2d34;
     }
     input {
       width: 100%;
       box-sizing: border-box;
-      border: 1px solid #cbd5e1;
+      border: 1px solid #d9dce3;
       border-radius: 12px;
       padding: 12px 14px;
       font-size: 15px;
       background: #fff;
+      color: #16161a;
+      transition: border-color .15s ease, box-shadow .15s ease;
     }
     input:focus {
-      outline: 2px solid #93c5fd;
-      border-color: #3b82f6;
+      outline: none;
+      border-color: #16161a;
+      box-shadow: 0 0 0 3px rgba(22, 22, 26, 0.08);
     }
-    button {
+    .help-row {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 8px;
+    }
+    .link-hint {
+      color: #6b7280;
+      font-size: 13px;
+      text-decoration: none;
+    }
+    .link-hint:hover {
+      color: #16161a;
+    }
+    .btn {
       width: 100%;
       margin-top: 20px;
       border: 0;
       border-radius: 12px;
       padding: 12px 14px;
-      background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+      background: #16161a;
       color: #fff;
       font-size: 15px;
       font-weight: 700;
       cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      transition: transform .12s ease, opacity .12s ease;
+    }
+    .btn:hover {
+      transform: translateY(-1px);
+    }
+    .help-block-error {
+      margin: 0 0 14px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: #fff1f2;
+      color: #9f1239;
+      border: 1px solid #fecdd3;
+      font-size: 13px;
+      line-height: 1.45;
     }
   </style>
 </head>
 <body>
-  <main class="card">
-    <h1>Sign in to PocketBase CLI</h1>
-    <p class="meta">Target: <code>${escapeHtml(options.baseUrl)}</code><br>Collection: <code>${escapeHtml(options.collection)}</code></p>
-    ${error}
-    <form method="post">
-      <input type="hidden" name="state" value="${escapeHtml(options.state)}">
-      <label for="identity">Identity</label>
-      <input id="identity" name="identity" type="text" autocomplete="username" value="${identity}" required>
-      <label for="password">Password</label>
-      <input id="password" name="password" type="password" autocomplete="current-password" required>
-      <button type="submit">Sign In</button>
-    </form>
+  <main class="page">
+    <div class="brand">${POCKETBASE_LOGO_SVG}<span>Pocket<strong>Base</strong></span></div>
+    <section class="panel">
+      <div class="content">
+        <h4>Superuser login</h4>
+        <p class="meta">Target: ${escapeHtml(options.baseUrl)}<br>Collection: ${escapeHtml(options.collection)}</p>
+      </div>
+      ${error}
+      <form class="block" method="post">
+        <input type="hidden" name="state" value="${escapeHtml(options.state)}">
+        <div class="form-field required">
+          <label for="identity">${escapeHtml(options.identityLabel)}</label>
+          <input id="identity" name="identity" type="${options.identityType}" autocomplete="username" value="${identity}" required autofocus>
+        </div>
+        <div class="form-field required">
+          <label for="password">Password</label>
+          <input id="password" name="password" type="password" autocomplete="current-password" required>
+          <div class="help-row"><a class="link-hint" href="${escapeHtml(options.passwordResetUrl)}" target="_blank" rel="noreferrer noopener">Forgotten password?</a></div>
+        </div>
+        <button class="btn btn-next" type="submit"><span class="txt">${escapeHtml(options.submitLabel)}</span><span aria-hidden="true">→</span></button>
+      </form>
+    </section>
   </main>
 </body>
 </html>`;
@@ -334,6 +445,35 @@ export function createAuthLoginBrowserDefinition(context: AppContext): CommandDe
             collection,
             timeout: context.state.config.timeout ?? null
           });
+          let authMethods: AuthMethodsPayload = {
+            password: {
+              identityFields: ["email"],
+              enabled: true
+            },
+            mfa: {
+              enabled: false
+            },
+            otp: {
+              enabled: false
+            }
+          };
+
+          try {
+            const authMethodsResult = await client.recordAuthMethods(collection);
+            authMethods = authMethodsResult.data as AuthMethodsPayload;
+          } catch {
+            // Keep the fallback password-only form if auth-methods probing fails.
+          }
+
+          const identityFields = authMethods.password?.identityFields?.length
+            ? authMethods.password.identityFields
+            : ["email"];
+          const hasExtraSteps = Boolean(authMethods.mfa?.enabled || authMethods.otp?.enabled);
+          const identityLabel = formatIdentityLabel(identityFields);
+          const identityType =
+            identityFields.length === 1 && identityFields[0] === "email" ? "email" : "text";
+          const submitLabel = hasExtraSteps ? "Next" : "Login";
+          const passwordResetUrl = getPasswordResetUrl(baseUrl);
 
           const historyParts = ["auth", "login-browser"];
           if (options.baseUrl) {
@@ -377,7 +517,11 @@ export function createAuthLoginBrowserDefinition(context: AppContext): CommandDe
                   baseUrl,
                   collection,
                   state: sessionState,
-                  identity
+                  identity,
+                  identityLabel,
+                  identityType,
+                  submitLabel,
+                  passwordResetUrl
                 })
               );
               return;
@@ -402,7 +546,11 @@ export function createAuthLoginBrowserDefinition(context: AppContext): CommandDe
                   collection,
                   state: sessionState,
                   identity,
-                  error: error instanceof Error ? error.message : String(error)
+                  error: error instanceof Error ? error.message : String(error),
+                  identityLabel,
+                  identityType,
+                  submitLabel,
+                  passwordResetUrl
                 })
               );
               return;
@@ -421,7 +569,11 @@ export function createAuthLoginBrowserDefinition(context: AppContext): CommandDe
                   collection,
                   state: sessionState,
                   identity: postedIdentity || identity,
-                  error: "This browser login session is invalid or expired."
+                  error: "This browser login session is invalid or expired.",
+                  identityLabel,
+                  identityType,
+                  submitLabel,
+                  passwordResetUrl
                 })
               );
               return;
@@ -436,7 +588,11 @@ export function createAuthLoginBrowserDefinition(context: AppContext): CommandDe
                   collection,
                   state: sessionState,
                   identity: postedIdentity || identity,
-                  error: "Identity and password are required."
+                  error: "Identity and password are required.",
+                  identityLabel,
+                  identityType,
+                  submitLabel,
+                  passwordResetUrl
                 })
               );
               return;
@@ -488,7 +644,11 @@ export function createAuthLoginBrowserDefinition(context: AppContext): CommandDe
                   collection,
                   state: sessionState,
                   identity: postedIdentity,
-                  error: message
+                  error: message,
+                  identityLabel,
+                  identityType,
+                  submitLabel,
+                  passwordResetUrl
                 })
               );
             }
