@@ -533,11 +533,7 @@ function parseTimeoutSeconds(
   }
 
   try {
-    const parsed = parseIntegerOptionValue("--timeout", value);
-    if (parsed <= 0) {
-      throw new Error("--timeout expects a positive integer value");
-    }
-    return parsed;
+    return parseIntegerOptionValue("--timeout", value, { min: 1 });
   } catch (error) {
     emitError({
       jsonOutput: context.jsonMode,

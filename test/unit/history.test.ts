@@ -1,14 +1,21 @@
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import { createCli } from "../../src/cli";
 import { CliExitError } from "../../src/core/output";
 import { SessionState, SessionStore } from "../../src/core/session-store";
 
+let historyContextCounter = 0;
+
 function context() {
+  const suffix = `${process.pid}-${Date.now()}-${historyContextCounter++}`;
+
   return {
     version: "0.1.0",
     jsonMode: true,
-    store: new SessionStore("/tmp/pocketbase-cli-history-tests.json"),
+    store: new SessionStore(join(tmpdir(), `pocketbase-cli-history-tests-${suffix}.json`)),
     state: new SessionState()
   };
 }
@@ -90,6 +97,22 @@ describe("history/undo/redo commands", () => {
     try {
       await expect(
         cli.parseAsync(["node", "pocketbase-cli", "--json", "history", "--limit", "abc"])
+      ).rejects.toBeInstanceOf(CliExitError);
+    } finally {
+      process.stdout.write = original;
+    }
+  });
+
+  it("rejects negative history limits", async () => {
+    const app = context();
+    const cli = createCli(app);
+
+    const original = process.stdout.write.bind(process.stdout);
+    process.stdout.write = (() => true) as typeof process.stdout.write;
+
+    try {
+      await expect(
+        cli.parseAsync(["node", "pocketbase-cli", "--json", "history", "--limit", "-1"])
       ).rejects.toBeInstanceOf(CliExitError);
     } finally {
       process.stdout.write = original;

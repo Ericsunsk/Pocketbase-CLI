@@ -11,12 +11,13 @@ import { buildSubcommand } from "./helpers/command";
 import { makeContext } from "./helpers/context";
 import { captureStdout } from "./helpers/output";
 
-function buildContext(options?: { jsonMode?: boolean }) {
+function buildContext(options?: { jsonMode?: boolean; authCollection?: string }) {
   return makeContext({
     storePath: "/tmp/pocketbase-cli-records-session.json",
     jsonMode: options?.jsonMode ?? false,
     baseUrl: "https://pb.example.com",
-    authed: true
+    authed: true,
+    authCollection: options?.authCollection
   });
 }
 
@@ -456,7 +457,7 @@ describe("records commands", () => {
   });
 
   it("does not overwrite saved auth on auth-refresh --no-save", async () => {
-    const context = buildContext();
+    const context = buildContext({ authCollection: "users" });
     vi.spyOn(PocketBaseRemoteClient.prototype, "recordAuthRefresh").mockResolvedValue({
       method: "POST",
       url: "/api/collections/users/auth-refresh",
@@ -475,6 +476,19 @@ describe("records commands", () => {
 
     expect(context.state.remoteAuth.token).toBe("token");
     expect(context.state.commandHistory.at(-1)).toBe("records auth-refresh users --no-save");
+  });
+
+  it("rejects auth-refresh when saved auth collection does not match the requested collection", async () => {
+    const context = buildContext();
+    const spy = vi.spyOn(PocketBaseRemoteClient.prototype, "recordAuthRefresh");
+
+    const command = buildSubcommand(createRecordsDefinition(context), "auth-refresh");
+
+    await expect(
+      command?.parseAsync(["node", "auth-refresh", "users"])
+    ).rejects.toBeInstanceOf(CliExitError);
+
+    expect(spy).not.toHaveBeenCalled();
   });
 
   it("redacts oauth2 codes in history and parses create-data payload", async () => {
@@ -572,5 +586,25 @@ describe("records commands", () => {
 
     expect(listSpy).not.toHaveBeenCalled();
     expect(deleteSpy).not.toHaveBeenCalled();
+  });
+
+  it("rejects non-positive impersonation duration values", async () => {
+    const context = buildContext();
+    const spy = vi.spyOn(PocketBaseRemoteClient.prototype, "recordImpersonate");
+
+    const command = buildSubcommand(createRecordsDefinition(context), "impersonate");
+
+    await expect(
+      command?.parseAsync([
+        "node",
+        "impersonate",
+        "users",
+        "rec1",
+        "--duration",
+        "0"
+      ])
+    ).rejects.toBeInstanceOf(CliExitError);
+
+    expect(spy).not.toHaveBeenCalled();
   });
 });

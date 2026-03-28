@@ -45,22 +45,23 @@ PocketBase CLI currently covers:
 - `raw` requests remain anonymous unless `--with-auth` is passed explicitly.
 - `preflight` is read-only and reports whether `base_url`, auth state, and `/api/health` are ready for the next remote command.
 - Base URL values are normalized and validated before remote calls. Invalid URLs, embedded credentials, query strings, and fragments are rejected early.
-- Sensitive values such as passwords, file tokens, backup tokens, OAuth2 codes, and code verifiers are redacted from command history and JSON success output where applicable.
+- Sensitive values such as passwords, file tokens, backup tokens, OAuth2 codes, code verifiers, and common secret-bearing response fields are redacted from command history plus remote success and error output where applicable.
+- `files token` and tokenized `files url` output are redacted by default; `files url --reveal-token` is the explicit opt-in for sensitive stdout output.
 
 ## Output and Automation
 
 - `--json` exposes a stable envelope containing `meta`, `result`, structured `error`, `http`, and `pagination`.
 - When a command proxies a remote HTTP response, `result` contains the decoded business payload and `data` preserves the raw transport wrapper.
 - `schema --json` provides a machine-readable command contract with parameter metadata, examples, enum choices, conflicts, and `input_schema` where available.
-- The REPL reuses the same envelope format for JSON output and supports command history redaction.
+- The REPL reuses the same envelope format for JSON output, persists history after command exits, and applies the same command redaction rules as one-shot CLI execution.
 
 ## Remote Coverage Notes
 
 - `collections ensure` provides idempotent create-or-update behavior keyed by collection name and supports `--if-exists`, `--if-missing`, and `--output summary|full`.
 - `records` covers common auth flows for auth collections, including password, OAuth2, OTP, refresh, password reset, verification, email change, and impersonation helpers.
 - `records find`, `records upsert`, and `records delete-by-filter` provide higher-level helpers for automation and agent workflows.
-- `files url` can generate file URLs and optionally fetch a temporary file token.
-- `backups download` fetches archive bytes with binary-safe response handling and writes private local files.
+- `files url` can generate file URLs and optionally fetch a temporary file token, with explicit opt-in required before printing sensitive signed URLs or tokens.
+- `backups download` fetches archive bytes with binary-safe streamed response handling and writes private local files.
 - `batch run` wraps `/api/batch` for JSON-based record mutations and supports `--data`, `--file`, `--file -`, or `--stdin-json`.
 
 ## Out of Scope

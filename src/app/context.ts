@@ -1,8 +1,10 @@
 import { SessionState, SessionStore } from "../core/session-store";
+import { CLI_VERSION } from "../core/version";
 import { readEnvConfig } from "../input/validators";
 
 export interface EnvConfig {
   base_url?: string | null;
+  base_url_error?: string | null;
 }
 
 export interface AppContext {
@@ -21,7 +23,7 @@ export async function createAppContext(): Promise<AppContext> {
   const envConfig = readEnvConfig();
 
   return {
-    version: "0.1.0",
+    version: CLI_VERSION,
     jsonMode: process.argv.includes("--json"),
     suppressHistory: false,
     onStateSaved: undefined,
@@ -125,6 +127,7 @@ export function buildAuthStatusPayload(context: AppContext): Record<string, unkn
     authenticated: context.state.hasRemoteAuth(),
     configured_base_url: context.state.config.base_url ?? null,
     env_base_url: context.envConfig?.base_url ?? null,
+    env_base_url_error: context.envConfig?.base_url_error ?? null,
     resolved_base_url: resolveBaseUrl(context),
     configured_auth_collection: context.state.config.auth_collection ?? "_superusers",
     active_base_url: remoteAuth.base_url ?? null,

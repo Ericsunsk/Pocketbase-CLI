@@ -131,4 +131,26 @@ describe("collections commands", () => {
       }
     });
   });
+
+  it("records bare create history when json input is missing", async () => {
+    const context = buildContext();
+    const command = buildSubcommand(createCollectionsDefinition(context), "create");
+
+    await expect(command?.parseAsync(["node", "create"])).rejects.toBeInstanceOf(CliExitError);
+
+    expect(context.state.commandHistory.at(-1)).toBe("collections create");
+  });
+
+  it("rejects negative collection pagination values", async () => {
+    const context = buildContext();
+    const spy = vi.spyOn(PocketBaseRemoteClient.prototype, "collectionsList");
+
+    const command = buildSubcommand(createCollectionsDefinition(context), "list");
+
+    await expect(
+      command?.parseAsync(["node", "list", "--page", "-1"])
+    ).rejects.toBeInstanceOf(CliExitError);
+
+    expect(spy).not.toHaveBeenCalled();
+  });
 });

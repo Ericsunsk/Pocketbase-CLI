@@ -112,7 +112,7 @@ function createHistoryDefinition(context: AppContext): CommandDefinition {
         .action((options: { limit?: string }) => {
           let parsedLimit: number;
           try {
-            parsedLimit = parseIntegerOptionValue("--limit", options.limit ?? "20");
+            parsedLimit = parseIntegerOptionValue("--limit", options.limit ?? "20", { min: 1 });
           } catch (error) {
             emitError({
               jsonOutput: context.jsonMode,
@@ -121,7 +121,7 @@ function createHistoryDefinition(context: AppContext): CommandDefinition {
               errorType: "invalid_input"
             });
           }
-          const limit = Math.max(parsedLimit, 1);
+          const limit = parsedLimit;
           const items = context.state.commandHistory.slice(-limit);
 
           emitSuccess({

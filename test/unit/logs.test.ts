@@ -72,4 +72,17 @@ describe("logs commands", () => {
 
     expect(spy).not.toHaveBeenCalled();
   });
+
+  it("rejects negative pagination values", async () => {
+    const context = buildContext();
+    const spy = vi.spyOn(PocketBaseRemoteClient.prototype, "logsList");
+
+    const command = buildSubcommand(createLogsDefinition(context), "list");
+
+    await expect(
+      command?.parseAsync(["node", "list", "--page", "-1"])
+    ).rejects.toBeInstanceOf(CliExitError);
+
+    expect(spy).not.toHaveBeenCalled();
+  });
 });

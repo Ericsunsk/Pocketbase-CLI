@@ -62,12 +62,16 @@ export function parseBatchPayload(payload: Record<string, unknown>): Record<stri
     }
 
     const normalizedMethod = method.trim().toUpperCase();
+    const normalizedUrl = url.trim();
     const allowedPattern = BATCH_ALLOWED_PATTERNS.get(normalizedMethod);
-    if (!allowedPattern || !allowedPattern.test(url.trim())) {
+    if (!allowedPattern || !allowedPattern.test(normalizedUrl)) {
       throw new Error(
         `Batch request ${index} must target one of the supported record actions: POST/PUT /api/collections/<collection>/records, PATCH/DELETE /api/collections/<collection>/records/<id>`
       );
     }
+
+    record.method = normalizedMethod;
+    record.url = normalizedUrl;
 
     const body = record.body;
     if (body !== undefined && (body === null || typeof body !== "object" || Array.isArray(body))) {

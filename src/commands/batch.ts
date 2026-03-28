@@ -27,7 +27,11 @@ function buildHistory(options: JsonInputOptions): string {
     return `batch run --file ${options.file}`;
   }
 
-  return "batch run --data <json>";
+  if (options.data !== undefined) {
+    return "batch run --data <json>";
+  }
+
+  return "batch run";
 }
 
 export function createBatchDefinition(context: AppContext): CommandDefinition {

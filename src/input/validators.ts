@@ -57,7 +57,7 @@ export function parseConfigValue(key: string, raw: string): string | number | nu
   }
 
   if (INT_CONFIG_KEYS.has(key)) {
-    return parseIntegerOptionValue(key, raw);
+    return parseIntegerOptionValue(key, raw, { min: 1 });
   }
 
   if (key === "base_url") {
@@ -78,18 +78,31 @@ export function readEnvBaseUrl(env: NodeJS.ProcessEnv = process.env): string | n
     return null;
   }
 
-  const parsed = parseConfigValue("base_url", trimmed);
-  return typeof parsed === "string" ? parsed : null;
+  try {
+    return parseBaseUrlValue(BASE_URL_ENV, trimmed);
+  } catch {
+    return null;
+  }
 }
 
 export function readEnvConfig(env: NodeJS.ProcessEnv = process.env): {
   base_url?: string | null;
+  base_url_error?: string | null;
 } {
-  const baseUrl = readEnvBaseUrl(env);
+  const raw = env[BASE_URL_ENV];
+  if (typeof raw !== "string" || !raw.trim()) {
+    return {};
+  }
 
-  return {
-    ...(baseUrl ? { base_url: baseUrl } : {})
-  };
+  try {
+    return {
+      base_url: parseBaseUrlValue(BASE_URL_ENV, raw.trim())
+    };
+  } catch (error) {
+    return {
+      base_url_error: error instanceof Error ? error.message : String(error)
+    };
+  }
 }
 
 export function quoteForHistory(value: string): string {
@@ -100,7 +113,14 @@ export function quoteForHistory(value: string): string {
   return value;
 }
 
-export function parseIntegerOptionValue(name: string, raw: string): number {
+export function parseIntegerOptionValue(
+  name: string,
+  raw: string,
+  options?: {
+    min?: number;
+    max?: number;
+  }
+): number {
   const trimmed = raw.trim();
   if (!/^-?\d+$/u.test(trimmed)) {
     throw new Error(`${name} expects an integer value`);
@@ -109,6 +129,20 @@ export function parseIntegerOptionValue(name: string, raw: string): number {
   const value = Number.parseInt(trimmed, 10);
   if (!Number.isSafeInteger(value)) {
     throw new Error(`${name} expects an integer value`);
+  }
+
+  if (options?.min !== undefined && value < options.min) {
+    if (options.min === 1 && options.max === undefined) {
+      throw new Error(`${name} expects a positive integer value`);
+    }
+    if (options.min === 0 && options.max === undefined) {
+      throw new Error(`${name} expects a non-negative integer value`);
+    }
+    throw new Error(`${name} expects an integer value greater than or equal to ${options.min}`);
+  }
+
+  if (options?.max !== undefined && value > options.max) {
+    throw new Error(`${name} expects an integer value less than or equal to ${options.max}`);
   }
 
   return value;

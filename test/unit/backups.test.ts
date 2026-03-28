@@ -23,6 +23,15 @@ async function createTempDir(): Promise<string> {
   return mkdtemp(join(tmpdir(), "pocketbase-cli-backups-"));
 }
 
+function streamFromBytes(bytes: number[]): ReadableStream<Uint8Array> {
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new Uint8Array(bytes));
+      controller.close();
+    }
+  });
+}
+
 describe("backups commands", () => {
   const tempDirs: string[] = [];
 
@@ -75,7 +84,7 @@ describe("backups commands", () => {
         method: "GET",
         url: "/api/backups/snapshot.zip?token=generated-token",
         status: 200,
-        data: new Uint8Array([7, 8, 9])
+        data: streamFromBytes([7, 8, 9])
       });
 
     const command = buildSubcommand(createBackupsDefinition(context), "download");

@@ -205,6 +205,47 @@ describe("auth commands", () => {
     expect(context.state.commandHistory.at(-1)).toBe("auth login admin@example.com ********");
   });
 
+  it("redacts auth tokens when auth payload validation fails", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        text: async () =>
+          JSON.stringify({
+            token: "secret-token",
+            record: "bad-record"
+          })
+      })
+    );
+
+    const context = await createAppContext();
+    context.state.setConfig("base_url", "https://pb.example.com");
+    const cli = createCli(context);
+    const stderr = captureStderr();
+
+    try {
+      await expect(
+        cli.parseAsync([
+          "node",
+          "pocketbase-cli",
+          "--json",
+          "auth",
+          "login",
+          "admin@example.com",
+          "Secret123"
+        ])
+      ).rejects.toBeInstanceOf(CliExitError);
+    } finally {
+      stderr.restore();
+    }
+
+    const rendered = stderr.output.join("");
+    expect(rendered).not.toContain("secret-token");
+    expect(rendered).toContain("********");
+  });
+
   it("refreshes saved auth and updates state", async () => {
     vi.stubGlobal(
       "fetch",

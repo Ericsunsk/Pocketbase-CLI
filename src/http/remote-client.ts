@@ -1,7 +1,22 @@
-import { readFile } from "node:fs/promises";
+import { createReadStream } from "node:fs";
 import { basename } from "node:path";
+import { randomBytes } from "node:crypto";
+import { CLI_USER_AGENT } from "../core/version";
 
 const AUTH_TOKEN_MISSING_MESSAGE = "Remote auth token is missing. Run `auth login` first.";
+const MULTIPART_TEXT_ENCODER = new TextEncoder();
+const REDACTED_SECRET = "********";
+const SENSITIVE_QUERY_KEYS = new Set([
+  "token",
+  "access_token",
+  "refresh_token",
+  "code_verifier",
+  "signature",
+  "sig",
+  "x-amz-signature",
+  "x-amz-credential",
+  "x-amz-security-token"
+]);
 
 export interface RemoteResult<TData = unknown> {
   method: string;
@@ -10,12 +25,14 @@ export interface RemoteResult<TData = unknown> {
   data: TData;
 }
 
-export interface RemoteBytesResult {
+export interface RemoteStreamResult {
   method: string;
   url: string;
   status: number;
-  data: Uint8Array;
+  data: ReadableStream<Uint8Array>;
 }
+
+type RequestBody = BodyInit | AsyncIterable<Uint8Array>;
 
 export class PocketBaseRemoteError extends Error {
   public readonly method: string;
@@ -40,9 +57,9 @@ export class PocketBaseRemoteError extends Error {
   public toJSON(): Record<string, unknown> {
     return {
       method: this.method,
-      url: this.url,
+      url: sanitizeUrlForOutput(this.url),
       status: this.status,
-      data: this.data
+      data: sanitizeRemoteValue(this.data)
     };
   }
 }
@@ -50,12 +67,13 @@ export class PocketBaseRemoteError extends Error {
 type QueryValue = string | number | boolean | null | undefined;
 
 interface RequestOptions {
-  body?: BodyInit;
+  body?: RequestBody;
   query?: Record<string, QueryValue>;
   requireAuth?: boolean;
   includeAuth?: boolean;
   allowedStatuses?: Set<number>;
   headers?: Record<string, string>;
+  duplex?: "half";
 }
 
 interface RequestExecutionOptions extends RequestOptions {
@@ -115,6 +133,137 @@ function extractErrorMessage(payload: unknown, raw: string, fallback: string): s
   return fallback;
 }
 
+function sanitizeUrlForOutput(url: string): string {
+  try {
+    const parsed = new URL(url);
+    for (const key of SENSITIVE_QUERY_KEYS) {
+      if (parsed.searchParams.has(key)) {
+        parsed.searchParams.set(key, REDACTED_SECRET);
+      }
+    }
+    return parsed.toString();
+  } catch {
+    return url.replace(
+      /([?&](?:token|access_token|refresh_token|code_verifier|signature|sig|x-amz-signature|x-amz-credential|x-amz-security-token)=)[^&#]+/giu,
+      `$1${REDACTED_SECRET}`
+    );
+  }
+}
+
+function normalizeSensitiveKey(key: string): string {
+  return key.replace(/[^a-z0-9]/giu, "").toLowerCase();
+}
+
+function isSensitiveOutputKey(key: string): boolean {
+  const normalized = normalizeSensitiveKey(key);
+
+  return (
+    normalized === "authorization" ||
+    normalized.endsWith("token") ||
+    normalized.endsWith("password") ||
+    normalized.endsWith("secret") ||
+    normalized.endsWith("privatekey") ||
+    normalized.endsWith("clientsecret") ||
+    normalized.endsWith("apikey") ||
+    normalized.endsWith("accesskey") ||
+    normalized.endsWith("secretkey")
+  );
+}
+
+function sanitizeStringForOutput(value: string): string {
+  if (
+    /[?&](?:token|access_token|refresh_token|code_verifier|signature|sig|x-amz-signature|x-amz-credential|x-amz-security-token)=/iu.test(
+      value
+    )
+  ) {
+    return sanitizeUrlForOutput(value);
+  }
+
+  return value;
+}
+
+export function sanitizeRemoteValue(value: unknown, key?: string): unknown {
+  if (typeof value === "string") {
+    if (key && isSensitiveOutputKey(key)) {
+      return REDACTED_SECRET;
+    }
+
+    return sanitizeStringForOutput(value);
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeRemoteValue(item));
+  }
+
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).map(([entryKey, entryValue]) => [
+      entryKey,
+      sanitizeRemoteValue(entryValue, entryKey)
+    ])
+  );
+}
+
+export function sanitizeRemoteResult<TData>(
+  result: RemoteResult<TData>
+): RemoteResult<TData | unknown> {
+  return {
+    ...result,
+    url: sanitizeUrlForOutput(result.url),
+    data: sanitizeRemoteValue(result.data) as TData | unknown
+  };
+}
+
+function encodeMultipartChunk(value: string): Uint8Array {
+  return MULTIPART_TEXT_ENCODER.encode(value);
+}
+
+function escapeMultipartDispositionValue(value: string): string {
+  return value.replace(/[\r\n]+/gu, " ").replace(/"/gu, "%22");
+}
+
+async function* createMultipartBodyStream(options: {
+  body: Record<string, unknown>;
+  fileFields: Array<{ fieldName: string; filePath: string; contentType?: string }>;
+  boundary: string;
+}): AsyncGenerator<Uint8Array> {
+  const boundaryPrefix = `--${options.boundary}\r\n`;
+
+  for (const [fieldName, value] of Object.entries(options.body)) {
+    const escapedFieldName = escapeMultipartDispositionValue(fieldName);
+    for (const renderedValue of coerceFormValues(value)) {
+      yield encodeMultipartChunk(boundaryPrefix);
+      yield encodeMultipartChunk(
+        `Content-Disposition: form-data; name="${escapedFieldName}"\r\n\r\n${renderedValue}\r\n`
+      );
+    }
+  }
+
+  for (const fileField of options.fileFields) {
+    const escapedFieldName = escapeMultipartDispositionValue(fileField.fieldName);
+    const filename = basename(fileField.filePath);
+    const escapedFilename = escapeMultipartDispositionValue(filename);
+    yield encodeMultipartChunk(boundaryPrefix);
+    yield encodeMultipartChunk(
+      `Content-Disposition: form-data; name="${escapedFieldName}"; filename="${escapedFilename}"\r\n`
+    );
+    yield encodeMultipartChunk(
+      `Content-Type: ${fileField.contentType ?? "application/octet-stream"}\r\n\r\n`
+    );
+
+    for await (const chunk of createReadStream(fileField.filePath)) {
+      yield typeof chunk === "string" ? encodeMultipartChunk(chunk) : chunk;
+    }
+
+    yield encodeMultipartChunk("\r\n");
+  }
+
+  yield encodeMultipartChunk(`--${options.boundary}--\r\n`);
+}
+
 export class PocketBaseRemoteClient {
   public readonly baseUrl: string;
   public readonly token: string | null;
@@ -133,7 +282,7 @@ export class PocketBaseRemoteClient {
     this.token = options.token ?? null;
     this.collection = options.collection ?? "_superusers";
     this.timeout = options.timeout ?? null;
-    this.userAgent = options.userAgent ?? "pocketbase-cli/0.1";
+    this.userAgent = options.userAgent ?? CLI_USER_AGENT;
   }
 
   public login(options: {
@@ -630,13 +779,24 @@ export class PocketBaseRemoteClient {
   public async backupsUpload(options: {
     filePath: string;
   }): Promise<RemoteResult<Record<string, unknown>>> {
-    const fileBytes = await readFile(options.filePath);
-    const formData = new FormData();
-    formData.append("file", new Blob([fileBytes], { type: "application/zip" }), basename(options.filePath));
-
+    const boundary = `pocketbase-cli-${randomBytes(12).toString("hex")}`;
     return this.requestBody("POST", "/api/backups/upload", {
-      body: formData,
-      requireAuth: true
+      body: createMultipartBodyStream({
+        body: {},
+        fileFields: [
+          {
+            fieldName: "file",
+            filePath: options.filePath,
+            contentType: "application/zip"
+          }
+        ],
+        boundary
+      }),
+      requireAuth: true,
+      headers: {
+        "Content-Type": `multipart/form-data; boundary=${boundary}`
+      },
+      duplex: "half"
     });
   }
 
@@ -655,8 +815,8 @@ export class PocketBaseRemoteClient {
   public backupsDownload(options: {
     name: string;
     token: string;
-  }): Promise<RemoteBytesResult> {
-    return this.requestBytes("GET", `/api/backups/${quotePathSegment(options.name)}`, {
+  }): Promise<RemoteStreamResult> {
+    return this.requestStream("GET", `/api/backups/${quotePathSegment(options.name)}`, {
       query: {
         token: options.token
       },
@@ -774,25 +934,19 @@ export class PocketBaseRemoteClient {
     };
   }
 
-  private async buildMultipartFormData(options: {
+  private buildMultipartFormData(options: {
     body: Record<string, unknown>;
     fileFields: Array<{ fieldName: string; filePath: string }>;
-  }): Promise<FormData> {
-    const formData = new FormData();
-
-    for (const [fieldName, value] of Object.entries(options.body)) {
-      for (const renderedValue of coerceFormValues(value)) {
-        formData.append(fieldName, renderedValue);
-      }
-    }
-
-    for (const fileField of options.fileFields) {
-      const fileBytes = await readFile(fileField.filePath);
-      const blob = new Blob([fileBytes]);
-      formData.append(fileField.fieldName, blob, basename(fileField.filePath));
-    }
-
-    return formData;
+  }): { body: AsyncIterable<Uint8Array>; boundary: string } {
+    const boundary = `pocketbase-cli-${randomBytes(12).toString("hex")}`;
+    return {
+      body: createMultipartBodyStream({
+        body: options.body,
+        fileFields: options.fileFields,
+        boundary
+      }),
+      boundary
+    };
   }
 
   private async requestMultipart<TData = unknown>(
@@ -807,17 +961,21 @@ export class PocketBaseRemoteClient {
       allowedStatuses?: Set<number>;
     }
   ): Promise<RemoteResult<TData>> {
-    const formData = await this.buildMultipartFormData({
+    const formData = this.buildMultipartFormData({
       body: options.body,
       fileFields: options.fileFields
     });
 
     return this.requestBody(method, path, {
-      body: formData,
+      body: formData.body,
       query: options.query,
       requireAuth: options.requireAuth,
       includeAuth: options.includeAuth,
-      allowedStatuses: options.allowedStatuses
+      allowedStatuses: options.allowedStatuses,
+      headers: {
+        "Content-Type": `multipart/form-data; boundary=${formData.boundary}`
+      },
+      duplex: "half"
     });
   }
 
@@ -876,12 +1034,16 @@ export class PocketBaseRemoteClient {
         : null;
 
     try {
-      const response = await fetch(url, {
-        method: normalizedMethod,
-        headers,
-        body: options.body,
-        signal: controller.signal
-      });
+      const response = await fetch(
+        url,
+        {
+          method: normalizedMethod,
+          headers,
+          body: options.body as BodyInit | null | undefined,
+          duplex: options.duplex,
+          signal: controller.signal
+        } as RequestInit & { duplex?: "half" }
+      );
       const parsed = await parseResponse(response);
 
       if (!response.ok && !options.allowedStatuses?.has(response.status)) {
@@ -913,27 +1075,85 @@ export class PocketBaseRemoteClient {
     }
   }
 
-  private async requestBytes(
+  private async requestStream(
     method: string,
     path: string,
     options?: RequestOptions
-  ): Promise<RemoteBytesResult> {
-    return this.executeRequest(
-      method,
-      path,
-      { ...options, accept: "*/*" },
-      async (response) => {
-        const data = new Uint8Array(await response.arrayBuffer());
-        const responseText = new TextDecoder().decode(data);
-        const errorData = decodeJson(responseText);
+  ): Promise<RemoteStreamResult> {
+    const normalizedMethod = method.toUpperCase();
+    const url = this.buildUrl(path, options?.query);
 
-        return {
-          data,
-          errorData,
-          errorMessage: extractErrorMessage(errorData, responseText, response.statusText)
-        };
+    if ((options?.requireAuth ?? false) && !this.token) {
+      throw this.createMissingAuthError(normalizedMethod, url);
+    }
+
+    const headers: Record<string, string> = {
+      Accept: "*/*",
+      "User-Agent": this.userAgent,
+      ...(options?.headers ?? {})
+    };
+    const includeAuth = options?.includeAuth ?? options?.requireAuth ?? false;
+    if (includeAuth && this.token) {
+      headers.Authorization = this.token;
+    }
+
+    const controller = new AbortController();
+    const timeoutHandle =
+      this.timeout !== null
+        ? setTimeout(() => controller.abort(), this.timeout * 1000)
+        : null;
+
+    try {
+      const response = await fetch(
+        url,
+        {
+          method: normalizedMethod,
+          headers,
+          body: options?.body as BodyInit | null | undefined,
+          duplex: options?.duplex,
+          signal: controller.signal
+        } as RequestInit & { duplex?: "half" }
+      );
+
+      if (!response.ok && !options?.allowedStatuses?.has(response.status)) {
+        const responseText = await response.text();
+        const errorData = decodeJson(responseText);
+        throw new PocketBaseRemoteError({
+          method: normalizedMethod,
+          url,
+          status: response.status,
+          message: extractErrorMessage(errorData, responseText, response.statusText),
+          data: errorData
+        });
       }
-    );
+
+      if (!response.body) {
+        throw new PocketBaseRemoteError({
+          method: normalizedMethod,
+          url,
+          status: response.status,
+          message: "Remote response did not include a readable body.",
+          data: {}
+        });
+      }
+
+      return {
+        method: normalizedMethod,
+        url,
+        status: response.status,
+        data: response.body
+      };
+    } catch (error) {
+      if (error instanceof PocketBaseRemoteError) {
+        throw error;
+      }
+
+      throw this.wrapUnknownRequestError(normalizedMethod, url, error);
+    } finally {
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle);
+      }
+    }
   }
 
   private async requestBody<TData = unknown>(

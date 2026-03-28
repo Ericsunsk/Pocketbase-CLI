@@ -53,10 +53,13 @@ export async function loadTextInput(options: {
   const fileIsStdin = options.filePath === "-";
   const explicitFilePath =
     options.filePath && options.filePath !== "-" ? options.filePath : undefined;
+  const hasData = options.data !== undefined;
+  const hasFile = options.filePath !== undefined;
+  const hasStdinJson = Boolean(options.stdinJson);
   const providedSources =
-    Number(options.data !== undefined) +
-    Number(explicitFilePath !== undefined) +
-    Number(Boolean(options.stdinJson || fileIsStdin));
+    Number(hasData) +
+    Number(hasFile) +
+    Number(hasStdinJson);
 
   if (options.required && providedSources !== 1) {
     throw new Error(

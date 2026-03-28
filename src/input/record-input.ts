@@ -28,13 +28,15 @@ export async function parseBinaryFileInputs(options: {
   const parsed: RecordBinaryFileInput[] = [];
 
   for (const item of options.binaryFiles) {
-    if (!item.includes("=")) {
+    const separatorIndex = item.indexOf("=");
+    if (separatorIndex < 0) {
       throw new Error(
         `${options.action} expected \`--binary-file\` in \`<field>=<path>\` format.`
       );
     }
 
-    const [fieldNameRaw, pathRaw] = item.split("=", 2);
+    const fieldNameRaw = item.slice(0, separatorIndex);
+    const pathRaw = item.slice(separatorIndex + 1);
     const fieldName = fieldNameRaw.trim();
     const pathValue = pathRaw.trim();
 

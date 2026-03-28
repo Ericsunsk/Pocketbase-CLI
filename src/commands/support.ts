@@ -4,7 +4,8 @@ import { emitError, emitSuccess } from "../core/output";
 import {
   PocketBaseRemoteClient,
   PocketBaseRemoteError,
-  RemoteResult
+  RemoteResult,
+  sanitizeRemoteResult
 } from "../http/remote-client";
 import { parseBaseUrlValue } from "../input/validators";
 
@@ -155,7 +156,7 @@ export function emitRemoteResult(
     jsonOutput: context.jsonMode,
     action: options.action,
     message: options.message,
-    data: options.result
+    data: sanitizeRemoteResult(options.result)
   });
 }
 

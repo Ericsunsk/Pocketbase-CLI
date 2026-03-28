@@ -86,6 +86,14 @@ describe("sanitizeHistoryTokens", () => {
         "secret-token"
       ])
     ).toBe("backups download nightly.zip --token ********");
+    expect(
+      sanitizeHistoryTokens([
+        "raw",
+        "GET",
+        "/api/files/users/rec1/avatar.png?token=secret-token#fragment",
+        "--with-auth"
+      ])
+    ).toBe("raw GET /api/files/users/rec1/avatar.png?<redacted>#<redacted> --with-auth");
   });
 });
 
@@ -195,6 +203,35 @@ describe("PocketBaseRepl", () => {
 
     expect(saveState).toHaveBeenCalledTimes(3);
     expect(dispatch).toHaveBeenCalledWith(["info"]);
+  });
+
+  it("persists history even when dispatch exits with CliExitError", async () => {
+    const context = createContext();
+    const saveState = vi.fn(async () => undefined);
+    const repl = new PocketBaseRepl({
+      context,
+      dispatch: async () => {
+        throw new CliExitError(1, "boom");
+      },
+      jsonOutput: true,
+      stdout: createWriter([]),
+      stderr: createWriter([]),
+      saveState,
+      readLine: async () => {
+        if (context.state.commandHistory.length > 0) {
+          throw new ReplEofError();
+        }
+
+        return "raw GET /api/files/users/rec1/avatar.png?token=secret-token#fragment --with-auth";
+      }
+    });
+
+    await repl.run();
+
+    expect(saveState).toHaveBeenCalledOnce();
+    expect(context.state.commandHistory).toEqual([
+      "raw GET /api/files/users/rec1/avatar.png?<redacted>#<redacted> --with-auth"
+    ]);
   });
 
   it("clears saved auth when built-in config set changes the target", async () => {

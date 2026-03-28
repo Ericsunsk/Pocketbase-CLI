@@ -30,6 +30,7 @@ The automated suite focuses on the behaviors that define the product contract:
 - auth redaction in history and JSON success output
 - encrypted session persistence and private file permissions for `session.json` and its `.key`
 - automatic auth clearing when persisted target settings no longer match a stored auth session
+- concurrent session save protection and stale lock recovery behavior
 
 ### Validation and Safety
 
@@ -44,15 +45,17 @@ The automated suite focuses on the behaviors that define the product contract:
 - settings, logs, crons, collections, records, files, backups, and batch command coverage
 - pagination helpers such as `--all`
 - record auth helper flows including OAuth2, refresh, OTP, password reset, verification, and impersonation
-- binary download handling for backup archives
-- remote client failure wrapping for JSON and binary responses
+- streamed upload and download handling for large backup and binary file flows
+- remote client failure wrapping and sensitive-field redaction for JSON and binary responses
 
 ### Regression Cases
 
-- token redaction for file URL and backup download helpers
+- token redaction for file URL, file token, backup download, and remote error helpers
 - `records auth-refresh --no-save` preserving the previously stored auth session
+- `records auth-refresh <collection>` rejecting mismatched saved auth locally
 - OAuth2 authorization code and code verifier redaction in record auth history
 - mismatched auth target rejection for `raw --with-auth`
+- REPL persistence after command exits and redaction of tokenized `raw` paths
 
 ## Validation Commands
 

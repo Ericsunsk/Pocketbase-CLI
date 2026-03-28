@@ -1,5 +1,9 @@
-import { access, chmod, mkdir, rename, stat, writeFile } from "node:fs/promises";
+import { createWriteStream } from "node:fs";
+import { access, chmod, mkdir, rename, rm, stat } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
+import { Readable, Transform } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import type { ReadableStream as NodeReadableStream } from "node:stream/web";
 
 import { Command } from "commander";
 
@@ -40,11 +44,31 @@ async function ensureUploadSource(filePath: string): Promise<{ size: number }> {
   };
 }
 
-async function writePrivateFileAtomic(path: string, data: Uint8Array): Promise<void> {
+async function writePrivateFileStreamAtomic(
+  path: string,
+  stream: ReadableStream<Uint8Array>
+): Promise<number> {
+  await mkdir(dirname(path), { recursive: true });
+
   const tempPath = `${path}.tmp-${process.pid}-${Date.now()}`;
-  await writeFile(tempPath, data, { mode: 0o600 });
-  await rename(tempPath, path);
-  await chmod(path, 0o600);
+  const input = Readable.fromWeb(stream as unknown as NodeReadableStream<Uint8Array>);
+  let size = 0;
+  const counter = new Transform({
+    transform(chunk, _encoding, callback): void {
+      size += Buffer.isBuffer(chunk) ? chunk.length : Buffer.byteLength(String(chunk));
+      callback(null, chunk);
+    }
+  });
+
+  try {
+    await pipeline(input, counter, createWriteStream(tempPath, { mode: 0o600 }));
+    await rename(tempPath, path);
+    await chmod(path, 0o600);
+    return size;
+  } catch (error) {
+    await rm(tempPath, { force: true });
+    throw error;
+  }
 }
 
 export function createBackupsDefinition(context: AppContext): CommandDefinition {
@@ -350,11 +374,7 @@ export function createBackupsDefinition(context: AppContext): CommandDefinition 
                     name,
                     token: resolvedToken
                   });
-
-                  await mkdir(dirname(targetPath), {
-                    recursive: true
-                  });
-                  await writePrivateFileAtomic(targetPath, result.data);
+                  const size = await writePrivateFileStreamAtomic(targetPath, result.data);
 
                   emitSuccess({
                     jsonOutput: context.jsonMode,
@@ -363,7 +383,7 @@ export function createBackupsDefinition(context: AppContext): CommandDefinition 
                     data: {
                       status: result.status,
                       path: targetPath,
-                      size: result.data.byteLength,
+                      size,
                       name
                     }
                   });

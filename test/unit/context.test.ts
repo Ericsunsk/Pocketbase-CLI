@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import type { AppContext } from "../../src/app/context";
-import { resolveAuthCollection, resolveBaseUrl } from "../../src/app/context";
+import { createAppContext, resolveAuthCollection, resolveBaseUrl } from "../../src/app/context";
 import { SessionState, SessionStore } from "../../src/core/session-store";
+import { CLI_VERSION } from "../../src/core/version";
 
 function createContext(): AppContext {
   return {
@@ -56,5 +57,32 @@ describe("context resolution", () => {
 
     expect(resolveBaseUrl(context)).toBe("https://prod.example.com");
     expect(resolveAuthCollection(context)).toBe("users");
+  });
+
+  it("does not fail startup when env base_url is invalid", async () => {
+    const previousBaseUrl = process.env.POCKETBASE_CLI_BASE_URL;
+    const previousStateDir = process.env.POCKETBASE_CLI_STATE_DIR;
+    process.env.POCKETBASE_CLI_BASE_URL = "not-a-url";
+    process.env.POCKETBASE_CLI_STATE_DIR = "/tmp/pocketbase-cli-context-invalid-env";
+
+    try {
+      const context = await createAppContext();
+      expect(context.version).toBe(CLI_VERSION);
+      expect(context.envConfig?.base_url).toBeUndefined();
+      expect(context.envConfig?.base_url_error).toContain("expects an absolute http:// or https:// URL");
+      expect(resolveBaseUrl(context)).toBeNull();
+    } finally {
+      if (previousBaseUrl === undefined) {
+        delete process.env.POCKETBASE_CLI_BASE_URL;
+      } else {
+        process.env.POCKETBASE_CLI_BASE_URL = previousBaseUrl;
+      }
+
+      if (previousStateDir === undefined) {
+        delete process.env.POCKETBASE_CLI_STATE_DIR;
+      } else {
+        process.env.POCKETBASE_CLI_STATE_DIR = previousStateDir;
+      }
+    }
   });
 });

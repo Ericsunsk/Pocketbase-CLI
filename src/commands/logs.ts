@@ -10,14 +10,15 @@ function parseNumber(
   context: AppContext,
   action: string,
   optionName: string,
-  value: string | undefined
+  value: string | undefined,
+  minimum = 1
 ): number | undefined {
   if (value === undefined) {
     return undefined;
   }
 
   try {
-    return parseIntegerOptionValue(optionName, value);
+    return parseIntegerOptionValue(optionName, value, { min: minimum });
   } catch (error) {
     emitError({
       jsonOutput: context.jsonMode,

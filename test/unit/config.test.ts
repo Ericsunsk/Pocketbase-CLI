@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { createCli } from "../../src/cli";
+import { CliExitError } from "../../src/core/output";
 import { makeContext } from "./helpers/context";
 import { captureStdout } from "./helpers/output";
 
@@ -42,5 +43,29 @@ describe("config commands", () => {
     expect(context.state.hasRemoteAuth()).toBe(false);
     expect(payload.message).toBe("Config updated and saved auth cleared");
     expect(payload.data.auth_cleared).toBe(true);
+  });
+
+  it("rejects non-positive timeout config values", async () => {
+    const context = createContext();
+    const cli = createCli(context);
+    const stdout = captureStdout();
+
+    try {
+      await expect(
+        cli.parseAsync([
+          "node",
+          "pocketbase-cli",
+          "--json",
+          "config",
+          "set",
+          "timeout",
+          "0"
+        ])
+      ).rejects.toBeInstanceOf(CliExitError);
+    } finally {
+      stdout.restore();
+    }
+
+    expect(context.state.config.timeout).toBeUndefined();
   });
 });

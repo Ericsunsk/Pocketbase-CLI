@@ -1,7 +1,23 @@
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import type { AppContext } from "../../../src/app/context";
 import { SessionState, SessionStore } from "../../../src/core/session-store";
 
 const DEFAULT_BASE_URL = "https://pb.example.com";
+let contextCounter = 0;
+
+function createStorePath(basePath?: string): string {
+  const suffix = `${process.pid}-${Date.now()}-${contextCounter++}`;
+
+  if (!basePath) {
+    return join(tmpdir(), `pocketbase-cli-test-session-${suffix}.json`);
+  }
+
+  return basePath.endsWith(".json")
+    ? `${basePath.slice(0, -".json".length)}-${suffix}.json`
+    : `${basePath}-${suffix}`;
+}
 
 export function makeContext(options?: {
   storePath?: string;
@@ -53,7 +69,7 @@ export function makeContext(options?: {
     suppressHistory: options?.suppressHistory ?? false,
     onStateSaved: undefined,
     envConfig: options?.envBaseUrl ? { base_url: options.envBaseUrl } : {},
-    store: new SessionStore(options?.storePath ?? "/tmp/pocketbase-cli-test-session.json"),
+    store: new SessionStore(createStorePath(options?.storePath)),
     state
   };
 }

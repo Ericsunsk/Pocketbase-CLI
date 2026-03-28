@@ -141,9 +141,12 @@ Base URL 解析优先级为：
 
 - 在 `--json` 模式下，`result` 表示解码后的业务结果；当命令直接代理 HTTP 响应时，`data` 会保留原始 transport wrapper。
 - `raw` 默认按匿名请求发送；只有显式传入 `--with-auth` 才会附带已保存的远程 token。
+- 默认会对远程成功/失败输出里的敏感字段做脱敏，包括文件 token、带签名的 URL、密码以及后端回显的常见密钥字段。
+- `files token` 和带 token 的 `files url` 默认只输出脱敏后的结果；只有明确需要把敏感值打印到 stdout 时，才应使用 `files url --with-token --reveal-token`。
 - 当持久化的 `base_url` 或 `auth_collection` 与当前已保存登录态不匹配时，CLI 会自动清理该登录态。
 - `preflight` 是只读命令，用来报告当前 config、auth 和 health 检查是否满足下一条远程命令的前置条件；如果 `base_url` 本身不合法，也会在发起远程探测前直接报错。
 - `auth login-browser` 会在 `127.0.0.1` 上启动一个临时本地服务，凭据不会通过远程回调地址传输。
+- REPL 的 history 持久化现在与单次 CLI 执行使用同一套脱敏规则，包括带 query/fragment 的 `raw` 请求路径。
 
 ## 能力边界
 
@@ -188,3 +191,4 @@ pocketbase/
 - [`DEVELOPMENT.md`](DEVELOPMENT.md)：开发与构建指南
 - [`TESTING.md`](TESTING.md)：测试策略与验证说明
 - [`CHANGELOG.md`](CHANGELOG.md)：发布说明
+- [`docs/releases/v0.1.4.md`](docs/releases/v0.1.4.md)：当前版本发布摘要

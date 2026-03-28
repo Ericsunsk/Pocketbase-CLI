@@ -141,9 +141,12 @@ Session storage:
 
 - In `--json` mode, `result` contains the decoded business payload. `data` preserves the raw transport wrapper when a command proxies an HTTP response.
 - `raw` requests are anonymous by default. Pass `--with-auth` to attach the saved remote auth token explicitly.
+- Secret-like fields in remote success and error output are redacted by default, including file tokens, signed URLs, passwords, and common API secret keys echoed by remote responses.
+- `files token` and tokenized `files url` output are redacted by default. Use `files url --with-token --reveal-token` only when you intentionally need a signed URL or temporary token on stdout.
 - Changing persisted `base_url` or `auth_collection` clears a stored auth session when it no longer matches the configured target.
 - `preflight` is read-only and reports whether config, auth, and health checks are ready for the next remote command. It also surfaces invalid configured base URLs before probing the remote server.
 - `auth login-browser` starts a temporary server on `127.0.0.1` and keeps credentials on the local machine.
+- REPL history persistence now follows the same redaction rules as one-shot CLI execution, including tokenized `raw` request paths.
 
 ## Scope
 
@@ -188,3 +191,4 @@ pocketbase/
 - [`DEVELOPMENT.md`](DEVELOPMENT.md): contributor and build guide
 - [`TESTING.md`](TESTING.md): test strategy and validation guide
 - [`CHANGELOG.md`](CHANGELOG.md): release notes
+- [`docs/releases/v0.1.4.md`](docs/releases/v0.1.4.md): latest release summary

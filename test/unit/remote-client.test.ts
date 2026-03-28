@@ -1,6 +1,29 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { CLI_USER_AGENT } from "../../src/core/version";
 import { PocketBaseRemoteClient, PocketBaseRemoteError } from "../../src/http/remote-client";
+
+async function readStreamBytes(stream: ReadableStream<Uint8Array>): Promise<number[]> {
+  const reader = stream.getReader();
+  const chunks: number[] = [];
+
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) {
+        return chunks;
+      }
+
+      chunks.push(...Array.from(value));
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
 
 describe("PocketBaseRemoteClient", () => {
   afterEach(() => {
@@ -130,12 +153,17 @@ describe("PocketBaseRemoteClient", () => {
     );
   });
 
-  it("downloads backup bytes with binary accept headers", async () => {
+  it("streams backup downloads with binary accept headers", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
       statusText: "OK",
-      arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer
+      body: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new Uint8Array([1, 2, 3]));
+          controller.close();
+        }
+      })
     });
     vi.stubGlobal("fetch", fetchMock);
 
@@ -149,17 +177,17 @@ describe("PocketBaseRemoteClient", () => {
       token: "file-token"
     });
 
-    expect(Array.from(result.data)).toEqual([1, 2, 3]);
+    expect(await readStreamBytes(result.data)).toEqual([1, 2, 3]);
     expect(fetchMock).toHaveBeenCalledWith(
-      "https://pb.example.com/api/backups/nightly.zip?token=file-token",
-      expect.objectContaining({
-        method: "GET",
-        headers: expect.objectContaining({
-          Accept: "*/*",
-          "User-Agent": "pocketbase-cli/0.1"
+        "https://pb.example.com/api/backups/nightly.zip?token=file-token",
+        expect.objectContaining({
+          method: "GET",
+          headers: expect.objectContaining({
+            Accept: "*/*",
+            "User-Agent": CLI_USER_AGENT
+          })
         })
-      })
-    );
+      );
     expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
       headers: expect.not.objectContaining({
         Authorization: "secret-token"
@@ -172,7 +200,7 @@ describe("PocketBaseRemoteClient", () => {
       ok: false,
       status: 500,
       statusText: "Internal Server Error",
-      arrayBuffer: async () => new TextEncoder().encode('{"message":"boom"}').buffer
+      text: async () => '{"message":"boom"}'
     });
     vi.stubGlobal("fetch", fetchMock);
 
@@ -190,5 +218,70 @@ describe("PocketBaseRemoteClient", () => {
       status: 500,
       url: "https://pb.example.com/api/backups/nightly.zip?token=file-token"
     });
+  });
+
+  it("redacts token query parameters in serialized remote errors", () => {
+    const error = new PocketBaseRemoteError({
+      method: "GET",
+      url: "https://pb.example.com/api/backups/nightly.zip?token=file-token",
+      status: 500,
+      message: "boom",
+      data: {
+        token: "secret-token",
+        nested: {
+          smtpPassword: "Secret123",
+          signedUrl: "https://pb.example.com/api/files/users/rec1/avatar.png?token=file-token"
+        }
+      }
+    });
+
+    expect((error.toJSON().url as string)).toContain("token=********");
+    expect(error.toJSON().data).toEqual({
+      token: "********",
+      nested: {
+        smtpPassword: "********",
+        signedUrl: "https://pb.example.com/api/files/users/rec1/avatar.png?token=********"
+      }
+    });
+  });
+
+  it("streams multipart backup uploads", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "pocketbase-cli-remote-client-"));
+    const archivePath = join(tempDir, "snapshot.zip");
+    await writeFile(archivePath, "zip-bytes");
+
+    try {
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        text: async () => "{}"
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      const client = new PocketBaseRemoteClient({
+        baseUrl: "https://pb.example.com",
+        token: "secret-token"
+      });
+
+      await client.backupsUpload({
+        filePath: archivePath
+      });
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        "https://pb.example.com/api/backups/upload",
+        expect.objectContaining({
+          method: "POST",
+          duplex: "half",
+          headers: expect.objectContaining({
+            "Content-Type": expect.stringContaining("multipart/form-data; boundary="),
+            Authorization: "secret-token"
+          })
+        })
+      );
+      expect(typeof fetchMock.mock.calls[0]?.[1]?.body?.[Symbol.asyncIterator]).toBe("function");
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
   });
 });

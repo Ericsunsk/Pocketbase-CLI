@@ -87,6 +87,25 @@ function sanitizeAuthLoginTokens(tokens: string[]): string {
   return rendered.join(" ");
 }
 
+function sanitizeRawHistoryPath(path: string): string {
+  const queryIndex = path.indexOf("?");
+  const fragmentIndex = path.indexOf("#");
+
+  let cutoff = path.length;
+  if (queryIndex >= 0) {
+    cutoff = Math.min(cutoff, queryIndex);
+  }
+  if (fragmentIndex >= 0) {
+    cutoff = Math.min(cutoff, fragmentIndex);
+  }
+
+  const basePath = path.slice(0, cutoff);
+  const hasQuery = queryIndex >= 0;
+  const hasFragment = fragmentIndex >= 0;
+
+  return `${basePath}${hasQuery ? "?<redacted>" : ""}${hasFragment ? "#<redacted>" : ""}`;
+}
+
 function hasUnterminatedQuote(line: string): boolean {
   let quote: '"' | "'" | null = null;
 
@@ -144,6 +163,12 @@ export function sanitizeHistoryTokens(tokens: string[]): string {
   }
 
   if (tokens[0] !== "records") {
+    if (tokens[0] === "raw" && tokens.length >= 3) {
+      const rendered = [...tokens];
+      rendered[2] = sanitizeRawHistoryPath(rendered[2]);
+      return rendered.join(" ");
+    }
+
     if (tokens[0] === "files" && tokens[1] === "url") {
       const rendered = [...tokens];
       for (let index = 0; index < rendered.length - 1; index += 1) {
@@ -361,6 +386,7 @@ export class PocketBaseRepl {
           await this.dispatch(tokens);
         } catch (error) {
           if (error instanceof CliExitError) {
+            await this.persistStateIfNeeded();
             continue;
           }
 

@@ -26,14 +26,19 @@ function parseNumber(
   context: AppContext,
   action: string,
   optionName: string,
-  value: string | undefined
+  value: string | undefined,
+  minimum?: number
 ): number | undefined {
   if (value === undefined) {
     return undefined;
   }
 
   try {
-    return parseIntegerOptionValue(optionName, value);
+    return parseIntegerOptionValue(
+      optionName,
+      value,
+      minimum === undefined ? undefined : { min: minimum }
+    );
   } catch (error) {
     emitError({
       jsonOutput: context.jsonMode,
@@ -375,7 +380,7 @@ function createSimpleRecordRemoteDefinition<TArgs extends RecordArgumentName>(
     destructive: false,
     confirmationRequired: false,
     parameters: options.argumentNames.map((argumentName) => argumentParameter(argumentName)),
-    build: () => {
+    build: (): Command => {
       const command = new Command(options.name).description(options.summary);
 
       for (const argumentName of options.argumentNames) {
@@ -493,7 +498,8 @@ async function runRecordAuthAction(
 ): Promise<void> {
   const client = buildRemoteClient(context, {
     action: options.action,
-    requireAuth: options.requireAuth
+    requireAuth: options.requireAuth,
+    collection: options.collection
   });
 
   try {
@@ -580,8 +586,8 @@ function createRecordsListDefinition(context: AppContext): CommandDefinition {
           ) => {
             await recordCommand(context, `records list ${collection}`);
 
-            const page = parseNumber(context, "records.list", "--page", options.page);
-            const perPage = parseNumber(context, "records.list", "--per-page", options.perPage);
+            const page = parseNumber(context, "records.list", "--page", options.page, 1);
+            const perPage = parseNumber(context, "records.list", "--per-page", options.perPage, 1);
 
             await runRemoteAction(context, {
               action: "records.list",
@@ -729,7 +735,7 @@ function createRecordsFindDefinition(context: AppContext): CommandDefinition {
                   })
                 : await fetchAllPages({
                     action: "records.find",
-                    perPage: parseNumber(context, "records.find", "--per-page", options.perPage),
+                    perPage: parseNumber(context, "records.find", "--per-page", options.perPage, 1),
                     fetchPage: (currentPage, currentPerPage) =>
                       runFindListPage(context, {
                         collection,
@@ -1221,7 +1227,8 @@ function createRecordsDeleteByFilterDefinition(context: AppContext): CommandDefi
               context,
               "records.delete-by-filter",
               "--expect-count",
-              options.expectCount
+              options.expectCount,
+              0
             );
             const client = buildRemoteClient(context, {
               action: "records.delete-by-filter",
@@ -1948,7 +1955,8 @@ function createRecordsImpersonateDefinition(context: AppContext): CommandDefinit
                     context,
                     "records.impersonate",
                     "--duration",
-                    options.duration
+                    options.duration,
+                    1
                   ),
                   fields: options.fields,
                   expand: options.expand

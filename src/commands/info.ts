@@ -83,7 +83,8 @@ export function createInfoDefinition(context: AppContext): CommandDefinition {
             mode: "remote",
             active_config: context.state.config,
             env_config: {
-              base_url: context.envConfig?.base_url ?? null
+              base_url: context.envConfig?.base_url ?? null,
+              base_url_error: context.envConfig?.base_url_error ?? null
             },
             resolved_base_url: resolveBaseUrl(context),
             resolved_auth_collection: resolveAuthCollection(context),

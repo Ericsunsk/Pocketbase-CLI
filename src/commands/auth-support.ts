@@ -50,7 +50,7 @@ export async function saveRemoteAuthResult(
       jsonOutput: context.jsonMode,
       action: options.action.replace(/ /gu, "."),
       message: error instanceof Error ? error.message : String(error),
-      data: options.result
+      data: redactAuthResult(options.result)
     });
   }
 

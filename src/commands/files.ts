@@ -5,14 +5,29 @@ import type { CommandDefinition } from "../contract/command-registry";
 import { emitError, emitSuccess } from "../core/output";
 import { buildRemoteClient, resolveFileToken, runRemoteAction } from "./support";
 
+const REDACTED_SECRET = "********";
+
 function redactCommand(parts: string[], sensitiveIndexes?: Set<number>): string {
   if (!sensitiveIndexes || sensitiveIndexes.size === 0) {
     return parts.join(" ");
   }
 
   return parts
-    .map((part, index) => (sensitiveIndexes.has(index) ? "********" : part))
+    .map((part, index) => (sensitiveIndexes.has(index) ? REDACTED_SECRET : part))
     .join(" ");
+}
+
+function sanitizeTokenizedUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    if (parsed.searchParams.has("token")) {
+      parsed.searchParams.set("token", REDACTED_SECRET);
+    }
+
+    return parsed.toString();
+  } catch {
+    return url.replace(/([?&]token=)[^&#]+/giu, `$1${REDACTED_SECRET}`);
+  }
 }
 
 export function createFilesDefinition(context: AppContext): CommandDefinition {
@@ -114,6 +129,16 @@ export function createFilesDefinition(context: AppContext): CommandDefinition {
             is_flag: true,
             nargs: 1,
             type: "BOOLEAN"
+          },
+          {
+            kind: "option",
+            name: "--reveal-token",
+            names: ["--reveal-token"],
+            required: false,
+            takes_value: false,
+            is_flag: true,
+            nargs: 1,
+            type: "BOOLEAN"
           }
         ],
         build: () =>
@@ -126,6 +151,7 @@ export function createFilesDefinition(context: AppContext): CommandDefinition {
             .option("--download", "Force download with PocketBase download=1")
             .option("--token <token>", "Optional file token query parameter")
             .option("--with-token", "Fetch a temporary file token and append it automatically")
+            .option("--reveal-token", "Print the resolved token and signed file URL to stdout")
             .action(
               async (
                 collection: string,
@@ -136,6 +162,7 @@ export function createFilesDefinition(context: AppContext): CommandDefinition {
                   download?: boolean;
                   token?: string;
                   withToken?: boolean;
+                  revealToken?: boolean;
                 }
               ) => {
                 if (options.token && options.withToken) {
@@ -143,6 +170,15 @@ export function createFilesDefinition(context: AppContext): CommandDefinition {
                     jsonOutput: context.jsonMode,
                     action: "files.url",
                     message: "Use either `--token` or `--with-token`, not both.",
+                    errorType: "invalid_input"
+                  });
+                }
+
+                if (options.revealToken && !options.token && !options.withToken) {
+                  emitError({
+                    jsonOutput: context.jsonMode,
+                    action: "files.url",
+                    message: "Use `--reveal-token` only together with `--token` or `--with-token`.",
                     errorType: "invalid_input"
                   });
                 }
@@ -163,6 +199,9 @@ export function createFilesDefinition(context: AppContext): CommandDefinition {
                 if (options.withToken) {
                   historyParts.push("--with-token");
                 }
+                if (options.revealToken) {
+                  historyParts.push("--reveal-token");
+                }
 
                 await recordCommand(
                   context,
@@ -182,25 +221,48 @@ export function createFilesDefinition(context: AppContext): CommandDefinition {
                   });
                 }
 
+                const rawUrl = client.buildFileUrl({
+                  collection,
+                  recordId,
+                  filename,
+                  thumb: options.thumb ?? null,
+                  download: Boolean(options.download)
+                });
+                const signedUrl = client.buildFileUrl({
+                  collection,
+                  recordId,
+                  filename,
+                  thumb: options.thumb ?? null,
+                  download: Boolean(options.download),
+                  token: resolvedToken
+                });
+                const tokenSource = options.withToken
+                  ? "generated"
+                  : options.token
+                    ? "provided"
+                    : null;
+                const revealToken = Boolean(options.revealToken && resolvedToken);
+
                 emitSuccess({
                   jsonOutput: context.jsonMode,
                   action: "files.url",
                   message: "File URL generated",
                   data: {
-                    url: client.buildFileUrl({
-                      collection,
-                      recordId,
-                      filename,
-                      thumb: options.thumb ?? null,
-                      download: Boolean(options.download),
-                      token: resolvedToken
-                    }),
+                    url: rawUrl,
                     collection,
                     record_id: recordId,
                     filename,
                     thumb: options.thumb ?? null,
                     download: Boolean(options.download),
-                    token: resolvedToken
+                    token: resolvedToken ? (revealToken ? resolvedToken : REDACTED_SECRET) : null,
+                    token_applied: Boolean(resolvedToken),
+                    token_source: tokenSource,
+                    url_with_token: resolvedToken
+                      ? revealToken
+                        ? signedUrl
+                        : sanitizeTokenizedUrl(signedUrl)
+                      : null,
+                    sensitive_output: revealToken
                   }
                 });
               }
