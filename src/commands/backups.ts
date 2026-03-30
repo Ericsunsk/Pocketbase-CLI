@@ -89,6 +89,7 @@ export function createBackupsDefinition(context: AppContext): CommandDefinition 
         authRequired: true,
         destructive: false,
         confirmationRequired: false,
+        examples: ["pocketbase-cli --json backups list"],
         build: () =>
           new Command("list")
             .description("List backup archives")
@@ -118,9 +119,11 @@ export function createBackupsDefinition(context: AppContext): CommandDefinition 
             takes_value: true,
             is_flag: false,
             nargs: 1,
-            type: "TEXT"
+            type: "TEXT",
+            help: "Optional backup archive name, for example snapshot.zip"
           }
         ],
+        examples: ["pocketbase-cli --json backups create --name snapshot.zip"],
         build: () =>
           new Command("create")
             .description("Create a new backup archive")
@@ -155,9 +158,11 @@ export function createBackupsDefinition(context: AppContext): CommandDefinition 
             name: "file_path",
             required: true,
             nargs: 1,
-            type: "TEXT"
+            type: "TEXT",
+            help: "Path to the backup .zip archive to upload"
           }
         ],
+        examples: ["pocketbase-cli --json backups upload ./pb_backup_20240101.zip"],
         build: () =>
           new Command("upload")
             .description("Upload a backup archive")
@@ -217,13 +222,15 @@ export function createBackupsDefinition(context: AppContext): CommandDefinition 
         destructive: true,
         confirmationRequired: true,
         confirmationFlag: "--yes",
+        examples: ["pocketbase-cli --json backups delete pb_backup_20240101.zip --yes"],
         parameters: [
           {
             kind: "argument",
             name: "name",
             required: true,
             nargs: 1,
-            type: "TEXT"
+            type: "TEXT",
+            help: "Backup archive filename, for example pb_backup_20240101.zip"
           },
           {
             kind: "option",
@@ -233,7 +240,8 @@ export function createBackupsDefinition(context: AppContext): CommandDefinition 
             takes_value: false,
             is_flag: true,
             nargs: 1,
-            type: "BOOLEAN"
+            type: "BOOLEAN",
+            help: "Acknowledge that deleting a backup archive is destructive"
           }
         ],
         build: () =>
@@ -266,13 +274,18 @@ export function createBackupsDefinition(context: AppContext): CommandDefinition 
         authRequired: true,
         destructive: false,
         confirmationRequired: false,
+        examples: [
+          "pocketbase-cli --json backups download pb_backup_20240101.zip",
+          "pocketbase-cli --json backups download pb_backup_20240101.zip --output ./my-backup.zip --overwrite"
+        ],
         parameters: [
           {
             kind: "argument",
             name: "name",
             required: true,
             nargs: 1,
-            type: "TEXT"
+            type: "TEXT",
+            help: "Backup archive filename, for example pb_backup_20240101.zip"
           },
           {
             kind: "option",
@@ -282,7 +295,8 @@ export function createBackupsDefinition(context: AppContext): CommandDefinition 
             takes_value: true,
             is_flag: false,
             nargs: 1,
-            type: "TEXT"
+            type: "TEXT",
+            help: "Destination file path. Defaults to ./<name>"
           },
           {
             kind: "option",
@@ -292,7 +306,9 @@ export function createBackupsDefinition(context: AppContext): CommandDefinition 
             takes_value: true,
             is_flag: false,
             nargs: 1,
-            type: "TEXT"
+            type: "TEXT",
+            help: "Optional backup file token. If omitted the CLI will fetch one automatically",
+            sensitive: true
           },
           {
             kind: "option",
@@ -302,7 +318,8 @@ export function createBackupsDefinition(context: AppContext): CommandDefinition 
             takes_value: false,
             is_flag: true,
             nargs: 1,
-            type: "BOOLEAN"
+            type: "BOOLEAN",
+            help: "Overwrite the destination file if it already exists"
           }
         ],
         build: () =>
@@ -410,13 +427,16 @@ export function createBackupsDefinition(context: AppContext): CommandDefinition 
         destructive: true,
         confirmationRequired: true,
         confirmationFlag: "--yes",
+        examples: ["pocketbase-cli --json backups restore pb_backup_20240101.zip --yes"],
+        notes: ["Restoring a backup replaces all current data and restarts the PocketBase application."],
         parameters: [
           {
             kind: "argument",
             name: "name",
             required: true,
             nargs: 1,
-            type: "TEXT"
+            type: "TEXT",
+            help: "Backup archive filename to restore"
           },
           {
             kind: "option",
@@ -426,7 +446,8 @@ export function createBackupsDefinition(context: AppContext): CommandDefinition 
             takes_value: false,
             is_flag: true,
             nargs: 1,
-            type: "BOOLEAN"
+            type: "BOOLEAN",
+            help: "Acknowledge that restore is destructive and restarts the app"
           }
         ],
         build: () =>

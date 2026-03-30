@@ -96,10 +96,10 @@ const OPTION_METADATA: Record<
     help: "Items per page"
   },
   "--filter": {
-    help: "PocketBase filter expression"
+    help: "PocketBase filter expression, e.g. 'email = \"demo@example.com\" && verified = true'"
   },
   "--sort": {
-    help: "PocketBase sort expression"
+    help: "PocketBase sort expression, e.g. '-created,+name' (prefix: + ascending, - descending)"
   },
   "--fields": {
     help: "Comma-separated field projection"
@@ -365,6 +365,8 @@ function createSimpleRecordRemoteDefinition<TArgs extends RecordArgumentName>(
     argumentNames: readonly TArgs[];
     sensitiveValueIndexes?: number[];
     successMessage: string;
+    examples?: string[];
+    notes?: string[];
     operation: (
       client: ReturnType<typeof buildRemoteClient>,
       args: Record<TArgs, string>
@@ -379,6 +381,8 @@ function createSimpleRecordRemoteDefinition<TArgs extends RecordArgumentName>(
     authRequired: options.authRequired,
     destructive: false,
     confirmationRequired: false,
+    examples: options.examples,
+    notes: options.notes,
     parameters: options.argumentNames.map((argumentName) => argumentParameter(argumentName)),
     build: (): Command => {
       const command = new Command(options.name).description(options.summary);
@@ -555,6 +559,10 @@ function createRecordsListDefinition(context: AppContext): CommandDefinition {
     examples: [
       "pocketbase-cli --json records list users --all",
       "pocketbase-cli --json records list users --filter 'verified=true' --fields id,email"
+    ],
+    notes: [
+      "Filter syntax: `field = \"value\"`, `field > 0`, `field ~ \"%partial%\"`, combine with `&&` / `||`. Example: `'email = \"demo@example.com\" && verified = true'`.",
+      "Sort syntax: prefix field with `+` for ascending (default) or `-` for descending. Multiple fields: `'-created,+name'`."
     ],
     parameters: [
       argumentParameter("collection"),
@@ -1147,13 +1155,18 @@ function createRecordsDeleteByFilterDefinition(context: AppContext): CommandDefi
     destructive: true,
     confirmationRequired: true,
     confirmationFlag: "--yes",
+    examples: [
+      "pocketbase-cli --json records delete-by-filter users --filter 'verified=false' --yes",
+      "pocketbase-cli --json records delete-by-filter users --filter 'created < \"2024-01-01\"' --expect-count 5 --yes"
+    ],
     parameters: [
       {
         kind: "argument",
         name: "collection",
         required: true,
         nargs: 1,
-        type: "TEXT"
+        type: "TEXT",
+        help: "PocketBase collection name"
       },
       {
         kind: "option",
@@ -1163,7 +1176,8 @@ function createRecordsDeleteByFilterDefinition(context: AppContext): CommandDefi
         takes_value: true,
         is_flag: false,
         nargs: 1,
-        type: "TEXT"
+        type: "TEXT",
+        help: "PocketBase filter expression"
       },
       {
         kind: "option",
@@ -1173,7 +1187,8 @@ function createRecordsDeleteByFilterDefinition(context: AppContext): CommandDefi
         takes_value: true,
         is_flag: false,
         nargs: 1,
-        type: "INTEGER"
+        type: "INTEGER",
+        help: "Fail unless the filter matches exactly this many records"
       },
       {
         kind: "option",
@@ -1183,7 +1198,8 @@ function createRecordsDeleteByFilterDefinition(context: AppContext): CommandDefi
         takes_value: false,
         is_flag: true,
         nargs: 1,
-        type: "BOOLEAN"
+        type: "BOOLEAN",
+        help: "Acknowledge that filtered deletion is destructive"
       }
     ],
     build: () =>
@@ -1374,20 +1390,23 @@ function createRecordsDeleteDefinition(context: AppContext): CommandDefinition {
     destructive: true,
     confirmationRequired: true,
     confirmationFlag: "--yes",
+    examples: ["pocketbase-cli --json records delete users RECORD_ID --yes"],
     parameters: [
       {
         kind: "argument",
         name: "collection",
         required: true,
         nargs: 1,
-        type: "TEXT"
+        type: "TEXT",
+        help: "PocketBase collection name"
       },
       {
         kind: "argument",
         name: "record_id",
         required: true,
         nargs: 1,
-        type: "TEXT"
+        type: "TEXT",
+        help: "PocketBase record id"
       },
       {
         kind: "option",
@@ -1397,7 +1416,8 @@ function createRecordsDeleteDefinition(context: AppContext): CommandDefinition {
         takes_value: false,
         is_flag: true,
         nargs: 1,
-        type: "BOOLEAN"
+        type: "BOOLEAN",
+        help: "Acknowledge that deleting a record is destructive"
       }
     ],
     build: () =>
@@ -1437,6 +1457,7 @@ function createRecordsAuthMethodsDefinition(context: AppContext): CommandDefinit
     authRequired: false,
     argumentNames: ["collection"],
     successMessage: "Record auth methods fetch completed",
+    examples: ["pocketbase-cli --json records auth-methods users"],
     operation: (client, args) => client.recordAuthMethods(args.collection)
   });
 }
@@ -1453,7 +1474,10 @@ function createRecordsAuthPasswordDefinition(context: AppContext): CommandDefini
     examples: [
       "pocketbase-cli --json records auth-password users demo@example.com Secret123 --fields id,email"
     ],
-    notes: ["Use `--no-save` when the returned token should not overwrite the saved auth session."],
+    notes: [
+      "Use `--no-save` when the returned token should not overwrite the saved auth session.",
+      "If MFA is enabled, the first call returns `mfa_required: true` with an `mfaId`. Re-run with `--mfa-id <mfaId>` to complete authentication."
+    ],
     parameters: [
       argumentParameter("collection"),
       argumentParameter("identity"),
@@ -1714,6 +1738,8 @@ function createRecordsRequestOtpDefinition(context: AppContext): CommandDefiniti
     authRequired: false,
     argumentNames: ["collection", "email"],
     successMessage: "Record OTP request completed",
+    examples: ["pocketbase-cli --json records request-otp users demo@example.com"],
+    notes: ["Returns an `otpId` needed by `records auth-otp` to complete authentication."],
     operation: (client, args) =>
       client.recordRequestOtp({
         collection: args.collection,
@@ -1731,6 +1757,12 @@ function createRecordsAuthOtpDefinition(context: AppContext): CommandDefinition 
     authRequired: false,
     destructive: false,
     confirmationRequired: false,
+    examples: [
+      "pocketbase-cli --json records auth-otp users OTP_ID 123456"
+    ],
+    notes: [
+      "The `otp_id` is returned by `records request-otp`. Two-step flow: first call `records request-otp <collection> <email>`, then use the returned `otpId` here."
+    ],
     parameters: [
       argumentParameter("collection"),
       argumentParameter("otp_id"),
@@ -1800,6 +1832,8 @@ function createRecordsRequestPasswordResetDefinition(context: AppContext): Comma
     authRequired: false,
     argumentNames: ["collection", "email"],
     successMessage: "Record password reset request completed",
+    examples: ["pocketbase-cli --json records request-password-reset users demo@example.com"],
+    notes: ["Sends a password reset email. Use the token from the email with `records confirm-password-reset`."],
     operation: (client, args) =>
       client.recordRequestPasswordReset({
         collection: args.collection,
@@ -1817,6 +1851,7 @@ function createRecordsConfirmPasswordResetDefinition(context: AppContext): Comma
     argumentNames: ["collection", "token", "password", "password_confirm"],
     sensitiveValueIndexes: [1, 2, 3],
     successMessage: "Record password reset confirmation completed",
+    examples: ["pocketbase-cli --json records confirm-password-reset users TOKEN NewPass123 NewPass123"],
     operation: (client, args) =>
       client.recordConfirmPasswordReset({
         collection: args.collection,
@@ -1835,6 +1870,8 @@ function createRecordsRequestVerificationDefinition(context: AppContext): Comman
     authRequired: false,
     argumentNames: ["collection", "email"],
     successMessage: "Record verification request completed",
+    examples: ["pocketbase-cli --json records request-verification users demo@example.com"],
+    notes: ["Sends a verification email. Use the token from the email with `records confirm-verification`."],
     operation: (client, args) =>
       client.recordRequestVerification({
         collection: args.collection,
@@ -1852,6 +1889,7 @@ function createRecordsConfirmVerificationDefinition(context: AppContext): Comman
     argumentNames: ["collection", "token"],
     sensitiveValueIndexes: [1],
     successMessage: "Record verification confirmation completed",
+    examples: ["pocketbase-cli --json records confirm-verification users TOKEN"],
     operation: (client, args) =>
       client.recordConfirmVerification({
         collection: args.collection,
@@ -1868,6 +1906,8 @@ function createRecordsRequestEmailChangeDefinition(context: AppContext): Command
     authRequired: true,
     argumentNames: ["collection", "new_email"],
     successMessage: "Record email change request completed",
+    examples: ["pocketbase-cli --json records request-email-change users new@example.com"],
+    notes: ["Sends a confirmation email to the new address. Use the token from the email with `records confirm-email-change`."],
     operation: (client, args) =>
       client.recordRequestEmailChange({
         collection: args.collection,
@@ -1885,6 +1925,7 @@ function createRecordsConfirmEmailChangeDefinition(context: AppContext): Command
     argumentNames: ["collection", "token", "password"],
     sensitiveValueIndexes: [1, 2],
     successMessage: "Record email change confirmation completed",
+    examples: ["pocketbase-cli --json records confirm-email-change users TOKEN CurrentPass123"],
     operation: (client, args) =>
       client.recordConfirmEmailChange({
         collection: args.collection,

@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented in this file.
 
+## v0.1.6
+
+### Changed
+
+- Removed the redundant `dangerous` field from the `schema --json` contract. Use `destructive` instead.
+- Improved `--filter` and `--sort` help text with inline syntax examples across records and collections commands.
+
+### Added
+
+- Added usage examples to all commands that previously lacked them: `backups` (all 6 subcommands), `records delete`, `records delete-by-filter`, `records auth-otp`, `records request-otp`, `records request-password-reset`, `records confirm-password-reset`, `records request-verification`, `records confirm-verification`, `records request-email-change`, `records confirm-email-change`, `records auth-methods`, `collections delete`, `collections truncate`, and `auth logout`.
+- Added `help` text to all inline parameter definitions in destructive commands (`backups delete/restore/download`, `records delete/delete-by-filter`, `collections delete/truncate`).
+- Added `notes` documenting multi-step authentication flows: MFA continuation via `--mfa-id`, OTP two-step flow (`request-otp` then `auth-otp`), password reset and verification request-then-confirm patterns.
+- Added PocketBase filter and sort syntax documentation to `records.list` notes.
+- Marked `backups.download --token` as `sensitive: true` in the schema contract.
+
 ## v0.1.5
 
 ### Changed

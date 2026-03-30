@@ -68,12 +68,12 @@ function listParameters(): CommandParameter[] {
     createOptionParameter({
       name: "--filter",
       type: "TEXT",
-      help: "PocketBase filter expression"
+      help: "PocketBase filter expression, e.g. 'name = \"users\"'"
     }),
     createOptionParameter({
       name: "--sort",
       type: "TEXT",
-      help: "PocketBase sort expression"
+      help: "PocketBase sort expression, e.g. '-created,+name' (prefix: + ascending, - descending)"
     }),
     createOptionParameter({
       name: "--all",
@@ -631,13 +631,15 @@ function createCollectionsDeleteDefinition(context: AppContext): CommandDefiniti
     destructive: true,
     confirmationRequired: true,
     confirmationFlag: "--yes",
+    examples: ["pocketbase-cli --json collections delete users --yes"],
     parameters: [
       {
         kind: "argument",
         name: "name_or_id",
         required: true,
         nargs: 1,
-        type: "TEXT"
+        type: "TEXT",
+        help: "Collection name or collection id"
       },
       {
         kind: "option",
@@ -647,7 +649,8 @@ function createCollectionsDeleteDefinition(context: AppContext): CommandDefiniti
         takes_value: false,
         is_flag: true,
         nargs: 1,
-        type: "BOOLEAN"
+        type: "BOOLEAN",
+        help: "Acknowledge that deleting a collection is destructive"
       }
     ],
     build: () =>
@@ -684,13 +687,15 @@ function createCollectionsTruncateDefinition(context: AppContext): CommandDefini
     destructive: true,
     confirmationRequired: true,
     confirmationFlag: "--yes",
+    examples: ["pocketbase-cli --json collections truncate users --yes"],
     parameters: [
       {
         kind: "argument",
         name: "name_or_id",
         required: true,
         nargs: 1,
-        type: "TEXT"
+        type: "TEXT",
+        help: "Collection name or collection id"
       },
       {
         kind: "option",
@@ -700,7 +705,8 @@ function createCollectionsTruncateDefinition(context: AppContext): CommandDefini
         takes_value: false,
         is_flag: true,
         nargs: 1,
-        type: "BOOLEAN"
+        type: "BOOLEAN",
+        help: "Acknowledge that truncating a collection removes all records"
       }
     ],
     build: () =>

@@ -11,7 +11,6 @@ export interface SchemaEntry {
   hidden: boolean;
   auth_required: boolean | string;
   destructive: boolean;
-  dangerous: boolean;
   confirmation_required: boolean;
   confirmation_flag: string | null;
   examples: string[];
@@ -63,7 +62,6 @@ function formatDefinitionEntry(definition: CommandDefinition, includeHidden: boo
     hidden: Boolean(definition.hidden),
     auth_required: definition.authRequired,
     destructive: definition.destructive,
-    dangerous: definition.destructive,
     confirmation_required: definition.confirmationRequired,
     confirmation_flag: definition.confirmationFlag ?? null,
     examples: [...(definition.examples ?? [])],
@@ -101,7 +99,6 @@ export function buildSchemaContract(
     hidden: false,
     auth_required: "varies",
     destructive: false,
-    dangerous: false,
     confirmation_required: false,
     confirmation_flag: null,
     examples: ["pocketbase-cli --json info", "pocketbase-cli schema --json"],

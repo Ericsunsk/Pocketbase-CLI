@@ -233,6 +233,8 @@ function createAuthLogoutDefinition(context: AppContext): CommandDefinition {
     authRequired: false,
     destructive: false,
     confirmationRequired: false,
+    examples: ["pocketbase-cli --json auth logout --yes"],
+    notes: ["In JSON mode (`--json`), `--yes` is required to skip the interactive confirmation prompt."],
     parameters: [
       createOptionParameter({
         name: "--yes",
