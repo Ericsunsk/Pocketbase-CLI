@@ -213,4 +213,4 @@ pocketbase/
 - [`DEVELOPMENT.md`](DEVELOPMENT.md)：开发与构建指南
 - [`TESTING.md`](TESTING.md)：测试策略与验证说明
 - [`CHANGELOG.md`](CHANGELOG.md)：发布说明
-- [`docs/releases/v0.1.4.md`](docs/releases/v0.1.4.md)：当前版本发布摘要
+- [`docs/releases/v0.1.5.md`](docs/releases/v0.1.5.md)：当前版本发布摘要

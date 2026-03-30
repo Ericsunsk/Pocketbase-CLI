@@ -213,4 +213,4 @@ pocketbase/
 - [`DEVELOPMENT.md`](DEVELOPMENT.md): contributor and build guide
 - [`TESTING.md`](TESTING.md): test strategy and validation guide
 - [`CHANGELOG.md`](CHANGELOG.md): release notes
-- [`docs/releases/v0.1.4.md`](docs/releases/v0.1.4.md): latest release summary
+- [`docs/releases/v0.1.5.md`](docs/releases/v0.1.5.md): latest release summary

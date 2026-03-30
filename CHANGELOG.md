@@ -2,6 +2,27 @@
 
 All notable changes to this project are documented in this file.
 
+## v0.1.5
+
+### Changed
+
+- Upgraded the development toolchain to `eslint` 9, `@typescript-eslint` 8, `tsup` 8.5.1, and `vitest` 4.1.2.
+- Migrated lint configuration from legacy `.eslintrc.json` to flat-config `eslint.config.mjs`.
+- Tightened test linting so test helpers still keep signal without forcing noisy explicit return types on routine builder/context wrappers.
+
+### Added
+
+- Added `scripts/install-global.sh` for one-line install or update from GitHub.
+- Documented one-line install flow and PATH behavior in the bilingual README files.
+
+### Validation
+
+- `npm install`
+- `npm run typecheck`
+- `npm run lint`
+- `npm test`
+- `npm run build`
+
 ## v0.1.4
 
 ### Added
