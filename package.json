@@ -16,7 +16,7 @@
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src --ext .ts",
+    "lint": "eslint src test",
     "test": "vitest run",
     "clean": "rm -rf dist",
     "dev": "tsup --watch"
@@ -29,12 +29,14 @@
     "dotenv": "^16.4.7"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.4",
     "@types/node": "^22.0.0",
-    "@typescript-eslint/eslint-plugin": "^7.0.0",
-    "@typescript-eslint/parser": "^7.0.0",
-    "eslint": "^8.57.0",
-    "tsup": "^7.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.57.2",
+    "@typescript-eslint/parser": "^8.57.2",
+    "eslint": "^9.39.4",
+    "globals": "^17.4.0",
+    "tsup": "^8.5.1",
     "typescript": "^5.5.0",
-    "vitest": "^0.34.0"
+    "vitest": "^4.1.2"
   }
 }
