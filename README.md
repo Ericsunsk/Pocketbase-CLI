@@ -26,6 +26,14 @@ PocketBase CLI provides a consistent command surface for remote administration, 
 
 ## Quick Start
 
+One-line install or update from GitHub:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Ericsunsk/Pocketbase-CLI/main/scripts/install-global.sh | bash
+```
+
+The installer clones or updates the repo under `~/.local/share/pocketbase-cli`, builds it, installs the global `pocketbase-cli` command, and prints a PATH hint when needed.
+
 ```sh
 npm install
 npm run build

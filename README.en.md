@@ -47,6 +47,27 @@ Compared with issuing HTTP calls directly, it adds:
 
 ## Installation
 
+### One-line Install or Update
+
+Requirements:
+
+- Node.js 20+
+- `git`
+- `npm`
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Ericsunsk/Pocketbase-CLI/main/scripts/install-global.sh | bash
+```
+
+What the script does:
+
+- clones or updates the repository under `~/.local/share/pocketbase-cli`
+- installs dependencies and builds the CLI
+- installs the global `pocketbase-cli` command
+- prints a PATH hint if the global npm bin directory is not available in the current shell
+
+The installed command name is `pocketbase-cli`, not `pocketbase`.
+
 ### Local Development
 
 ```sh

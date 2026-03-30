@@ -47,6 +47,27 @@
 
 ## 安装方式
 
+### 一键安装或更新
+
+前置要求：
+
+- Node.js 20+
+- `git`
+- `npm`
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Ericsunsk/Pocketbase-CLI/main/scripts/install-global.sh | bash
+```
+
+这个脚本会：
+
+- 在 `~/.local/share/pocketbase-cli` 下克隆或更新仓库
+- 安装依赖并构建 CLI
+- 安装全局命令 `pocketbase-cli`
+- 如果当前 shell 里还没有全局 npm bin 目录，会打印 PATH 提示
+
+安装后的命令名是 `pocketbase-cli`，不是 `pocketbase`。
+
 ### 本地开发
 
 ```sh
