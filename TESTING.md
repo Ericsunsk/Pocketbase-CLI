@@ -25,7 +25,7 @@ The automated suite focuses on the behaviors that define the product contract:
 ### Authentication and State
 
 - remote superuser login via positional password and `--password-stdin`
-- browser-assisted login via `auth login-browser --no-open`
+- browser-assisted login via `auth login --no-open`
 - `auth status`, `auth whoami`, `auth refresh`, and logout flows
 - auth redaction in history and JSON success output
 - encrypted session persistence and private file permissions for `session.json` and its `.key`

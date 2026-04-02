@@ -71,7 +71,7 @@ All notable changes to this project are documented in this file.
 
 - Tightened base URL validation across config, preflight, info, and shared remote client setup.
 - Limited environment-based defaults to remote target selection and local state directory configuration.
-- Updated authentication guidance to use command arguments, `--password-stdin`, or `auth login-browser` for credentials.
+- Updated authentication guidance to use command arguments, `--password-stdin`, or `auth login` for credentials.
 - Refined browser-assisted login behavior and documentation for headless environments through `--no-open`.
 
 ### Documentation
@@ -82,7 +82,7 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
-- Browser-assisted login with `auth login-browser`.
+- Browser-assisted login with `auth login`.
 - Local loopback login flow that can run without auto-opening a browser.
 - Expanded readiness and login reporting around remote authentication flows.
 

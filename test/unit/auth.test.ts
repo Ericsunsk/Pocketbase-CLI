@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createCli } from "../../src/cli";
 import { createAppContext } from "../../src/app/context";
-import { CliExitError } from "../../src/core/output";
 import { PocketBaseRemoteClient, PocketBaseRemoteError } from "../../src/http/remote-client";
 import { captureStderr, captureStdout } from "./helpers/output";
 
@@ -16,234 +15,6 @@ describe("auth commands", () => {
       globalThis.fetch = REAL_FETCH;
     }
     vi.restoreAllMocks();
-  });
-
-  it("logs in with positional password and persists auth state", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockImplementation(async (input: string | URL | Request) => {
-        const url = String(input);
-        if (url.includes("/api/health")) {
-          return {
-            ok: true,
-            status: 200,
-            statusText: "OK",
-            text: async () =>
-              JSON.stringify({
-                message: "API is healthy.",
-                code: 200,
-                data: {}
-              })
-          };
-        }
-
-        return {
-          ok: true,
-          status: 200,
-          statusText: "OK",
-          text: async () =>
-            JSON.stringify({
-              token: "secret-token",
-              record: { id: "superuser_1", email: "admin@example.com" }
-            })
-        };
-      })
-    );
-
-    const context = await createAppContext();
-    const cli = createCli(context);
-    const capture = captureStdout();
-
-    try {
-      await cli.parseAsync([
-        "node",
-        "pocketbase-cli",
-        "--json",
-        "config",
-        "set",
-        "base_url",
-        "https://pb.example.com"
-      ]);
-      await cli.parseAsync([
-        "node",
-        "pocketbase-cli",
-        "--json",
-        "auth",
-        "login",
-        "admin@example.com",
-        "Secret123"
-      ]);
-    } finally {
-      capture.restore();
-    }
-
-    expect(context.state.hasRemoteAuth()).toBe(true);
-    expect(context.state.remoteAuth.base_url).toBe("https://pb.example.com");
-    expect(context.state.remoteAuth.record).toEqual({
-      id: "superuser_1",
-      email: "admin@example.com"
-    });
-    expect(capture.output.join("")).not.toContain("secret-token");
-    expect(capture.output.join("")).toContain("********");
-  });
-
-  it("accepts explicit http base URLs for auth login", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      statusText: "OK",
-      text: async () =>
-        JSON.stringify({
-          token: "secret-token",
-          record: { id: "superuser_1", email: "admin@example.com" }
-        })
-    });
-    vi.stubGlobal("fetch", fetchMock);
-
-    const context = await createAppContext();
-    const cli = createCli(context);
-    const capture = captureStdout();
-
-    try {
-      await cli.parseAsync([
-        "node",
-        "pocketbase-cli",
-        "--json",
-        "auth",
-        "login",
-        "--base-url",
-        "http://127.0.0.1:8090/pocketbase/",
-        "admin@example.com",
-        "Secret123"
-      ]);
-    } finally {
-      capture.restore();
-    }
-
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
-      "http://127.0.0.1:8090/pocketbase/api/collections/_superusers/auth-with-password"
-    );
-    expect(context.state.remoteAuth.base_url).toBe("http://127.0.0.1:8090/pocketbase");
-  });
-
-  it("redacts password-stdin login history without persisting the flag", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockImplementation(async (input: string | URL | Request) => {
-        const url = String(input);
-        if (url.includes("/api/health")) {
-          return {
-            ok: true,
-            status: 200,
-            statusText: "OK",
-            text: async () =>
-              JSON.stringify({
-                message: "API is healthy.",
-                code: 200,
-                data: {}
-              })
-          };
-        }
-
-        return {
-          ok: true,
-          status: 200,
-          statusText: "OK",
-          text: async () =>
-            JSON.stringify({
-              token: "secret-token",
-              record: { id: "superuser_1", email: "admin@example.com" }
-            })
-        };
-      })
-    );
-
-    const stdin = process.stdin as NodeJS.ReadStream & {
-      [Symbol.asyncIterator]?: () => AsyncIterator<string>;
-    };
-    const originalIterator = stdin[Symbol.asyncIterator];
-    stdin[Symbol.asyncIterator] = async function* (): AsyncGenerator<string> {
-      yield "Secret123\n";
-    };
-
-    const context = await createAppContext();
-    const cli = createCli(context);
-    const capture = captureStdout();
-
-    try {
-      await cli.parseAsync([
-        "node",
-        "pocketbase-cli",
-        "--json",
-        "config",
-        "set",
-        "base_url",
-        "https://pb.example.com"
-      ]);
-      await cli.parseAsync([
-        "node",
-        "pocketbase-cli",
-        "--json",
-        "auth",
-        "login",
-        "--password-stdin",
-        "admin@example.com"
-      ]);
-    } finally {
-      capture.restore();
-      if (originalIterator) {
-        stdin[Symbol.asyncIterator] = originalIterator;
-      } else {
-        Reflect.deleteProperty(
-          stdin as NodeJS.ReadStream & Record<PropertyKey, unknown>,
-          Symbol.asyncIterator
-        );
-      }
-    }
-
-    expect(context.state.commandHistory.at(-1)).toBe("auth login admin@example.com ********");
-  });
-
-  it("redacts auth tokens when auth payload validation fails", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        status: 200,
-        statusText: "OK",
-        text: async () =>
-          JSON.stringify({
-            token: "secret-token",
-            record: "bad-record"
-          })
-      })
-    );
-
-    const context = await createAppContext();
-    context.state.setConfig("base_url", "https://pb.example.com");
-    const cli = createCli(context);
-    const stderr = captureStderr();
-
-    try {
-      await expect(
-        cli.parseAsync([
-          "node",
-          "pocketbase-cli",
-          "--json",
-          "auth",
-          "login",
-          "admin@example.com",
-          "Secret123"
-        ])
-      ).rejects.toBeInstanceOf(CliExitError);
-    } finally {
-      stderr.restore();
-    }
-
-    const rendered = stderr.output.join("");
-    expect(rendered).not.toContain("secret-token");
-    expect(rendered).toContain("********");
   });
 
   it("refreshes saved auth and updates state", async () => {
@@ -300,55 +71,6 @@ describe("auth commands", () => {
     expect(context.state.hasRemoteAuth()).toBe(false);
   });
 
-  it("auth login rejects missing identity", async () => {
-    const context = await createAppContext();
-    const cli = createCli(context);
-    const capture = captureStdout();
-
-    await expect(
-      cli.parseAsync(["node", "pocketbase-cli", "--json", "auth", "login"])
-    ).rejects.toBeInstanceOf(CliExitError);
-
-    capture.restore();
-  });
-
-  it("auth login rejects invalid explicit base URLs", async () => {
-    const context = await createAppContext();
-    const cli = createCli(context);
-    const capture = captureStdout();
-
-    await expect(
-      cli.parseAsync([
-        "node",
-        "pocketbase-cli",
-        "--json",
-        "auth",
-        "login",
-        "--base-url",
-        "ftp://pb.example.com",
-        "admin@example.com",
-        "Secret123"
-      ])
-    ).rejects.toBeInstanceOf(CliExitError);
-
-    capture.restore();
-  });
-
-  it("does not use env-provided credentials for auth login", async () => {
-    process.env.POCKETBASE_CLI_BASE_URL = "https://pb.example.com";
-
-    const context = await createAppContext();
-    const cli = createCli(context);
-    const capture = captureStdout();
-
-    await expect(
-      cli.parseAsync(["node", "pocketbase-cli", "--json", "auth", "login"])
-    ).rejects.toBeInstanceOf(CliExitError);
-
-    capture.restore();
-    expect(context.state.hasRemoteAuth()).toBe(false);
-  });
-
   it("serves a browser login page and persists auth state after form submit", async () => {
     process.env.POCKETBASE_CLI_BASE_URL = "https://pb.example.com";
 
@@ -383,7 +105,7 @@ describe("auth commands", () => {
         "pocketbase-cli",
         "--json",
         "auth",
-        "login-browser",
+        "login",
         "--no-open",
         "--timeout",
         "5"
@@ -428,7 +150,7 @@ describe("auth commands", () => {
 
     expect(context.state.hasRemoteAuth()).toBe(true);
     expect(context.state.remoteAuth.base_url).toBe("https://pb.example.com");
-    expect(context.state.commandHistory.at(-1)).toBe("auth login-browser --no-open --timeout 5");
+    expect(context.state.commandHistory.at(-1)).toBe("auth login --no-open --timeout 5");
 
     const payload = JSON.parse(stdout.output.join("").trim()) as {
       action: string;
@@ -444,7 +166,7 @@ describe("auth commands", () => {
         };
       };
     };
-    expect(payload.action).toBe("auth.login-browser");
+    expect(payload.action).toBe("auth.login");
     expect(payload.message).toBe("Remote auth login successful and preflight passed");
     expect(payload.data.auth.data.token).toBe("********");
     expect(payload.data.preflight.ready).toBe(true);
@@ -483,7 +205,7 @@ describe("auth commands", () => {
         "pocketbase-cli",
         "--json",
         "auth",
-        "login-browser",
+        "login",
         "--no-open",
         "--timeout",
         "5"

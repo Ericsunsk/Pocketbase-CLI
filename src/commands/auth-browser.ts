@@ -556,16 +556,16 @@ function writeLaunchMessage(options: {
   process.stderr.write(`Waiting up to ${options.timeoutSeconds}s for browser login to complete.\n`);
 }
 
-export function createAuthLoginBrowserDefinition(context: AppContext): CommandDefinition {
+export function createAuthLoginDefinition(context: AppContext): CommandDefinition {
   return {
-    name: "login-browser",
-    path: "auth.login-browser",
+    name: "login",
+    path: "auth.login",
     kind: "command",
     summary: "Open a local browser login page and save the resulting remote auth token",
     authRequired: false,
     destructive: false,
     confirmationRequired: false,
-    examples: ["pocketbase-cli auth login-browser", "pocketbase-cli auth login-browser --no-open"],
+    examples: ["pocketbase-cli auth login", "pocketbase-cli auth login --no-open"],
     notes: [
       "This command starts a temporary HTTP server bound to 127.0.0.1 and never exposes credentials over a remote callback URL."
     ],
@@ -599,7 +599,7 @@ export function createAuthLoginBrowserDefinition(context: AppContext): CommandDe
       })
     ],
     build: () =>
-      new Command("login-browser")
+      new Command("login")
         .description("Open a local browser login page and save the resulting remote auth token")
         .option("--base-url <url>", "Prefill the BaseUrl field, for example https://pb.example.com")
         .option(
@@ -616,7 +616,7 @@ export function createAuthLoginBrowserDefinition(context: AppContext): CommandDe
           timeout?: string;
           open?: boolean;
         }) => {
-          const action = "auth.login-browser";
+          const action = "auth.login";
           let initialBaseUrl = resolveBaseUrl(context) ?? "";
           if (options.baseUrl) {
             try {
@@ -674,7 +674,7 @@ export function createAuthLoginBrowserDefinition(context: AppContext): CommandDe
           const identityType =
             identityFields.length === 1 && identityFields[0] === "email" ? "email" : "text";
           const submitLabel = hasExtraSteps ? "Next" : "Login";
-          const historyParts = ["auth", "login-browser"];
+          const historyParts = ["auth", "login"];
           if (options.baseUrl) {
             historyParts.push("--base-url", options.baseUrl);
           }
@@ -847,7 +847,7 @@ export function createAuthLoginBrowserDefinition(context: AppContext): CommandDe
 
               await saveRemoteAuthResult(context, {
                 result,
-                action: "auth login-browser",
+                action: "auth login",
                 baseUrl: validatedPostedBaseUrl,
                 collection
               });

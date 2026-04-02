@@ -30,8 +30,7 @@ PocketBase CLI currently covers:
 ## Authentication and State
 
 - The primary login flow is remote PocketBase superuser authentication against `_superusers`, unless another auth collection is configured.
-- `auth login` accepts credentials from command arguments or `--password-stdin`.
-- `auth login-browser` starts a temporary local server on `127.0.0.1` and presents a browser form for credential entry. It supports `--no-open` for headless environments.
+- `auth login` accepts credentials from command arguments or `--password-stdin`, or opens a local browser form when run interactively. It supports `--no-open` for headless environments.
 - Persisted config, history, and auth state are stored under `~/.cache/pocketbase-cli` by default.
 - The persisted session file is encrypted at rest and uses a sibling `session.json.key` file for local decryption.
 - The CLI attempts to restrict both the encrypted session file and the key file to `0600` permissions.

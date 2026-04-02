@@ -70,7 +70,7 @@ These commands are useful for local verification after a build:
 ```sh
 node dist/bin.js config set base_url https://pb.example.com
 printf 'Secret123\n' | node dist/bin.js auth login --password-stdin admin@example.com
-node dist/bin.js auth login-browser --no-open
+node dist/bin.js auth login --no-open
 node dist/bin.js --json preflight --require-auth
 node dist/bin.js --json info
 node dist/bin.js raw GET /api/health

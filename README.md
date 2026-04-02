@@ -1,75 +1,106 @@
-# PocketBase CLI
+<p align="center">
+  <img src="https://raw.githubusercontent.com/pocketbase/pocketbase/master/ui/dist/images/logo.svg" alt="PocketBase" width="64" />
+</p>
 
-[![Node.js 20+](https://img.shields.io/badge/node-20%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
-[![Remote Only](https://img.shields.io/badge/mode-remote--only-0A7EA4)](README.en.md)
-[![JSON + Schema](https://img.shields.io/badge/output-JSON%20%2B%20schema-1F6FEB)](README.en.md)
-[![Latest Release](https://img.shields.io/github/v/release/Ericsunsk/Pocketbase-CLI)](https://github.com/Ericsunsk/Pocketbase-CLI/releases/latest)
-[![Last Commit](https://img.shields.io/github/last-commit/Ericsunsk/Pocketbase-CLI)](https://github.com/Ericsunsk/Pocketbase-CLI/commits/main)
-[![GitHub Stars](https://img.shields.io/github/stars/Ericsunsk/Pocketbase-CLI?style=social)](https://github.com/Ericsunsk/Pocketbase-CLI/stargazers)
+<h1 align="center">PocketBase CLI</h1>
 
-Standalone remote CLI for deployed [PocketBase](https://github.com/pocketbase/pocketbase) instances.
+<p align="center">
+  Remote-first command-line client for deployed <a href="https://github.com/pocketbase/pocketbase">PocketBase</a> instances.
+</p>
 
-[`English`](README.en.md) | [`简体中文`](README.zh-CN.md)
+<p align="center">
+  <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/node-20%2B-339933?logo=node.js&logoColor=white" alt="Node.js 20+" /></a>
+  <a href="https://github.com/Ericsunsk/Pocketbase-CLI/releases/latest"><img src="https://img.shields.io/github/v/release/Ericsunsk/Pocketbase-CLI" alt="Latest Release" /></a>
+  <a href="https://github.com/Ericsunsk/Pocketbase-CLI/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License" /></a>
+  <a href="https://github.com/Ericsunsk/Pocketbase-CLI/stargazers"><img src="https://img.shields.io/github/stars/Ericsunsk/Pocketbase-CLI?style=social" alt="GitHub Stars" /></a>
+</p>
 
-## Overview
+<p align="center">
+  <a href="README.en.md">English</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="README.zh-CN.md">简体中文</a>
+</p>
 
-PocketBase CLI provides a consistent command surface for remote administration, automation, and agent-driven workflows. It wraps the PocketBase HTTP API with stable command semantics, explicit confirmation guards, and machine-readable output designed for scripts and tools.
+---
 
-## Highlights
+## Features
 
-- Remote-first administration for deployed PocketBase instances
-- Stable `--json` output for automation and integrations
-- Machine-readable `schema --json` command contract
-- Browser-assisted login with `auth login-browser`
-- Encrypted local persistence for stored auth, config, and command history
-- Explicit `--yes` guardrails for destructive or side-effectful operations
+- **Remote-only** &mdash; manage deployed PocketBase over its HTTP API, no local binary required
+- **Structured output** &mdash; stable `--json` envelope with `meta`, `result`, `error`, `http`, `pagination`
+- **Agent-friendly** &mdash; machine-readable `schema --json` for LLM agents and tool integrations
+- **Browser login** &mdash; local loopback form via `auth login`, with `--no-open` for headless environments
+- **Encrypted state** &mdash; auth tokens, config, and command history encrypted at rest
+- **Safety rails** &mdash; destructive operations require explicit `--yes` confirmation
 
-## Quick Start
-
-One-line install or update from GitHub:
+## Install
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/Ericsunsk/Pocketbase-CLI/main/scripts/install-global.sh | bash
 ```
 
-The installer clones or updates the repo under `~/.local/share/pocketbase-cli`, builds it, installs the global `pocketbase-cli` command, and prints a PATH hint when needed.
+> Requires Node.js 20+, git, and npm. Installs the global `pocketbase-cli` command.
 
-## Uninstall
+<details>
+<summary>Other installation methods</summary>
+
+**From source:**
+
+```sh
+git clone https://github.com/Ericsunsk/Pocketbase-CLI.git
+cd Pocketbase-CLI
+npm install && npm run build
+```
+
+**Uninstall:**
 
 ```sh
 npm uninstall -g pocketbase-cli --prefix "$(npm prefix -g)" && rm -rf ~/.local/share/pocketbase-cli ~/.cache/pocketbase-cli
 ```
 
-```sh
-npm install
-npm run build
+</details>
 
-node dist/bin.js config set base_url https://pb.example.com
-
-printf 'Secret123\n' | node dist/bin.js auth login --password-stdin admin@example.com
-node dist/bin.js --json info
-```
-
-Alternative authentication flow:
+## Quick Start
 
 ```sh
-node dist/bin.js auth login-browser
-# headless hosts:
-node dist/bin.js auth login-browser --no-open
+# Connect to your PocketBase instance
+pocketbase-cli config set base_url https://pb.example.com
+
+# Authenticate (opens browser login form)
+pocketbase-cli auth login
+
+# Verify connection
+pocketbase-cli preflight --require-auth
+
+# Start working
+pocketbase-cli --json info
+pocketbase-cli records list users --all
+pocketbase-cli collections list
 ```
 
-Base URL resolution priority is: command-line arguments > persisted `config set ...` values > `POCKETBASE_CLI_BASE_URL` > stored auth session target.
+## Commands
 
-Only the remote base URL is read from the environment. Login identity and password must come from command arguments, `--password-stdin`, or the local browser form.
-
-By default the CLI stores config, history, and auth state under `~/.cache/pocketbase-cli`. The persisted session file is encrypted at rest and uses an adjacent `.key` file.
+| Group | Subcommands |
+| --- | --- |
+| **auth** | `login` `logout` `status` `whoami` `refresh` |
+| **collections** | `list` `get` `create` `update` `ensure` `delete` `truncate` `import` `scaffolds` |
+| **records** | `list` `get` `create` `update` `delete` `find` `upsert` `delete-by-filter` + auth flows |
+| **files** | `token` `url` |
+| **backups** | `list` `create` `upload` `delete` `download` `restore` |
+| **settings** | `get` `patch` `test-s3` `test-email` `apple-client-secret` |
+| **logs** | `list` `get` `stats` |
+| **crons** | `list` `run` |
+| **batch** | `run` |
+| **raw** | `<METHOD> <PATH>` with optional `--with-auth` |
+| **utilities** | `info` `schema` `preflight` `config` `history` `undo` `redo` `repl` |
 
 ## Documentation
 
-- [`README.en.md`](README.en.md): full English guide
-- [`README.zh-CN.md`](README.zh-CN.md): 完整中文指南
-- [`FEATURES.md`](FEATURES.md): feature and behavior reference
-- [`DEVELOPMENT.md`](DEVELOPMENT.md): contributor and build guide
-- [`TESTING.md`](TESTING.md): test strategy and validation guide
-- [`CHANGELOG.md`](CHANGELOG.md): release notes
-- [`docs/releases/v0.1.5.md`](docs/releases/v0.1.5.md): latest release summary
+| | |
+| --- | --- |
+| [English Guide](README.en.md) | Full usage and configuration reference |
+| [中文指南](README.zh-CN.md) | 完整使用和配置参考 |
+| [Features](FEATURES.md) | Feature and behavior reference |
+| [Development](DEVELOPMENT.md) | Contributor and build guide |
+| [Changelog](CHANGELOG.md) | Release notes |
+
+## License
+
+[MIT](LICENSE)
