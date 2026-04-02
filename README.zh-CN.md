@@ -89,6 +89,12 @@ node dist/bin.js --help
 npm i -g pocketbase-cli
 ```
 
+## 卸载方式
+
+```sh
+npm uninstall -g pocketbase-cli --prefix "$(npm prefix -g)" && rm -rf ~/.local/share/pocketbase-cli ~/.cache/pocketbase-cli
+```
+
 ## 快速开始
 
 ```sh

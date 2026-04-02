@@ -89,6 +89,12 @@ Use this after publishing to npm if you want the command available outside the c
 npm i -g pocketbase-cli
 ```
 
+## Uninstall
+
+```sh
+npm uninstall -g pocketbase-cli --prefix "$(npm prefix -g)" && rm -rf ~/.local/share/pocketbase-cli ~/.cache/pocketbase-cli
+```
+
 ## Quick Start
 
 ```sh

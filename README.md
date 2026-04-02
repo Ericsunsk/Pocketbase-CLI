@@ -34,6 +34,12 @@ curl -fsSL https://raw.githubusercontent.com/Ericsunsk/Pocketbase-CLI/main/scrip
 
 The installer clones or updates the repo under `~/.local/share/pocketbase-cli`, builds it, installs the global `pocketbase-cli` command, and prints a PATH hint when needed.
 
+## Uninstall
+
+```sh
+npm uninstall -g pocketbase-cli --prefix "$(npm prefix -g)" && rm -rf ~/.local/share/pocketbase-cli ~/.cache/pocketbase-cli
+```
+
 ```sh
 npm install
 npm run build
