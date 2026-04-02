@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented in this file.
 
+## v0.1.7
+
+### Changed
+
+- Consolidated browser-assisted authentication under `auth login` and removed the separate `auth login-browser` command path.
+- `auth login` now consistently uses the local loopback browser flow and persists successful remote auth state after form submission.
+- Updated auth-related command history/action labels to the unified `auth login` naming.
+
+### Documentation
+
+- Refreshed README files (`README.md`, `README.en.md`, `README.zh-CN.md`) around installation/auth usage and aligned uninstall instructions to a one-line full cleanup command.
+- Updated release and contributor docs to reflect the current auth flow and command examples.
+
 ## v0.1.6
 
 ### Changed
