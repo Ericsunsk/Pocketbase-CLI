@@ -242,6 +242,85 @@ describe("auth commands", () => {
     expect(payload.data.preflight.ready).toBe(true);
   });
 
+  it("prints a concise success line for non-json browser login", async () => {
+    process.env.POCKETBASE_CLI_BASE_URL = "https://pb.example.com";
+
+    vi.spyOn(PocketBaseRemoteClient.prototype, "login").mockResolvedValue({
+      method: "POST",
+      url: "https://pb.example.com/api/collections/_superusers/auth-with-password",
+      status: 200,
+      data: {
+        token: "secret-token",
+        record: { id: "superuser_1", email: "admin@example.com" }
+      }
+    });
+    vi.spyOn(PocketBaseRemoteClient.prototype, "raw").mockResolvedValue({
+      method: "GET",
+      url: "https://pb.example.com/api/health",
+      status: 200,
+      data: {
+        message: "API is healthy.",
+        code: 200,
+        data: {}
+      }
+    });
+
+    const context = await createAppContext();
+    const cli = createCli(context);
+    const stdout = captureStdout();
+    const stderr = captureStderr();
+
+    try {
+      const commandPromise = cli.parseAsync([
+        "node",
+        "pocketbase-cli",
+        "auth",
+        "login",
+        "--no-open",
+        "--timeout",
+        "5"
+      ]);
+
+      let launchUrl: string | null = null;
+      for (let attempt = 0; attempt < 50 && !launchUrl; attempt += 1) {
+        const combined = stderr.output.join("");
+        const match = combined.match(/http:\/\/127\.0\.0\.1:\d+\/login\/[a-f0-9]+/u);
+        launchUrl = match?.[0] ?? null;
+        if (!launchUrl) {
+          await new Promise((resolve) => setTimeout(resolve, 20));
+        }
+      }
+
+      expect(launchUrl).toBeTruthy();
+
+      const formPage = await fetch(String(launchUrl));
+      const html = await formPage.text();
+      const stateMatch = html.match(/name="state" value="([^"]+)"/u);
+      expect(stateMatch?.[1]).toBeTruthy();
+
+      const response = await fetch(String(launchUrl), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: new URLSearchParams({
+          state: String(stateMatch?.[1]),
+          baseUrl: "https://pb.example.com",
+          identity: "admin@example.com",
+          password: "Secret123"
+        })
+      });
+
+      expect(response.status).toBe(200);
+      await commandPromise;
+    } finally {
+      stdout.restore();
+      stderr.restore();
+    }
+
+    expect(stdout.output.join("").trim()).toBe("Login successful✅");
+  });
+
   it("starts the browser login page without waiting for auth-methods probing", async () => {
     process.env.POCKETBASE_CLI_BASE_URL = "https://pb.example.com";
 

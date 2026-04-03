@@ -889,17 +889,24 @@ export function createAuthLoginDefinition(context: AppContext): CommandDefinitio
                 const preflight = await runPreflightCheck(context, {
                   requireAuth: true
                 });
+                const successMessage = context.jsonMode
+                  ? preflight.ready
+                    ? "Remote auth login successful and preflight passed"
+                    : "Remote auth login successful but preflight reported issues"
+                  : preflight.ready
+                    ? "Login successful✅"
+                    : "Login successful✅, but preflight reported issues. Run `pocketbase-cli preflight --require-auth` for details.";
 
                 emitSuccess({
                   jsonOutput: context.jsonMode,
                   action,
-                  message: preflight.ready
-                    ? "Remote auth login successful and preflight passed"
-                    : "Remote auth login successful but preflight reported issues",
-                  data: {
-                    auth: redactAuthResult(result),
-                    preflight
-                  }
+                  message: successMessage,
+                  data: context.jsonMode
+                    ? {
+                        auth: redactAuthResult(result),
+                        preflight
+                      }
+                    : undefined
                 });
               })();
               server.close();
