@@ -1,5 +1,6 @@
 import { SessionState, SessionStore } from "../core/session-store";
 import { CLI_VERSION } from "../core/version";
+import { sanitizeRemoteValue } from "../http/remote-client";
 import { readEnvConfig } from "../input/validators";
 
 export interface EnvConfig {
@@ -132,6 +133,6 @@ export function buildAuthStatusPayload(context: AppContext): Record<string, unkn
     configured_auth_collection: context.state.config.auth_collection ?? "_superusers",
     active_base_url: remoteAuth.base_url ?? null,
     active_collection: remoteAuth.collection ?? null,
-    record: remoteAuth.record ?? null
+    record: sanitizeRemoteValue(remoteAuth.record ?? null)
   };
 }

@@ -9,7 +9,7 @@ import {
   createOptionParameter
 } from "../contract/metadata";
 import { emitError, emitSuccess } from "../core/output";
-import type { RemoteResult } from "../http/remote-client";
+import { sanitizeRemoteResult, type RemoteResult } from "../http/remote-client";
 import { loadOptionalJsonObjectInput } from "../input/json-input";
 import { loadRecordMutationInput as loadSharedRecordMutationInput } from "../input/record-input";
 import { parseIntegerOptionValue } from "../input/validators";
@@ -461,7 +461,7 @@ async function emitRecordAuthOrMfaResult(
       action: options.action,
       message: options.mfaMessage,
       data: {
-        ...options.result,
+        ...sanitizeRemoteResult(options.result),
         mfaId: payload.mfaId,
         mfa_required: true,
         saved: false

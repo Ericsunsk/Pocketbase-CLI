@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createRawDefinition } from "../../src/commands/raw";
 import { CliExitError } from "../../src/core/output";
 import { makeContext } from "./helpers/context";
-import { silenceProcessOutput } from "./helpers/output";
+import { captureStdout, silenceProcessOutput } from "./helpers/output";
 
 function buildContext(options?: {
   configBaseUrl?: string;
@@ -113,5 +113,45 @@ describe("raw command", () => {
     ).rejects.toBeInstanceOf(CliExitError);
 
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("redacts tokenized urls in successful raw output", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      text: async () =>
+        JSON.stringify({
+          signedUrl: "https://pb.example.com/api/files/users/rec1/avatar.png?token=file-token"
+        })
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const context = buildContext();
+    const command = createRawDefinition(context).build?.();
+    const stdout = captureStdout();
+
+    try {
+      await command?.parseAsync([
+        "node",
+        "raw",
+        "GET",
+        "/probe/path?token=secret-token"
+      ]);
+    } finally {
+      stdout.restore();
+    }
+
+    const payload = JSON.parse(stdout.output.join("").trim()) as {
+      data: {
+        url: string;
+      };
+      result: {
+        signedUrl: string;
+      };
+    };
+
+    expect(payload.data.url).toContain("token=********");
+    expect(payload.result.signedUrl).toContain("token=********");
   });
 });

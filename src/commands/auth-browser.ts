@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { spawn } from "node:child_process";
+import * as childProcess from "node:child_process";
 import { createServer, IncomingMessage, ServerResponse } from "node:http";
 
 import { Command } from "commander";
@@ -42,6 +42,12 @@ interface AuthMethodsPayload {
   };
 }
 
+interface LoginPageView {
+  identityLabel: string;
+  identityType: "email" | "text";
+  submitLabel: string;
+}
+
 function escapeHtml(value: string): string {
   return value
     .replace(/&/gu, "&amp;")
@@ -70,6 +76,35 @@ function formatIdentityLabel(identityFields: string[]): string {
   }
 
   return `${words.slice(0, -1).join(" or ")} or ${words.at(-1)}`;
+}
+
+function createDefaultAuthMethods(): AuthMethodsPayload {
+  return {
+    password: {
+      identityFields: ["identity"],
+      enabled: true
+    },
+    mfa: {
+      enabled: false
+    },
+    otp: {
+      enabled: false
+    }
+  };
+}
+
+function buildLoginPageView(authMethods: AuthMethodsPayload): LoginPageView {
+  const identityFields = authMethods.password?.identityFields?.length
+    ? authMethods.password.identityFields
+    : ["email"];
+  const hasExtraSteps = Boolean(authMethods.mfa?.enabled || authMethods.otp?.enabled);
+
+  return {
+    identityLabel: formatIdentityLabel(identityFields),
+    identityType:
+      identityFields.length === 1 && identityFields[0] === "email" ? "email" : "text",
+    submitLabel: hasExtraSteps ? "Next" : "Login"
+  };
 }
 
 function renderLoginPage(options: {
@@ -503,7 +538,26 @@ async function readFormBody(request: IncomingMessage): Promise<URLSearchParams> 
   return new URLSearchParams(Buffer.concat(chunks).toString("utf8"));
 }
 
-function tryOpenBrowser(url: string): boolean {
+async function probeAuthMethods(options: {
+  baseUrl: string;
+  collection: string;
+  timeoutSeconds: number;
+}): Promise<AuthMethodsPayload | null> {
+  const client = new PocketBaseRemoteClient({
+    baseUrl: options.baseUrl,
+    collection: options.collection,
+    timeout: options.timeoutSeconds
+  });
+
+  try {
+    const authMethodsResult = await client.recordAuthMethods(options.collection);
+    return authMethodsResult.data as AuthMethodsPayload;
+  } catch {
+    return null;
+  }
+}
+
+export async function tryOpenBrowser(url: string): Promise<boolean> {
   const command =
     process.platform === "darwin"
       ? { bin: "open", args: [url] }
@@ -512,12 +566,26 @@ function tryOpenBrowser(url: string): boolean {
         : { bin: "xdg-open", args: [url] };
 
   try {
-    const child = spawn(command.bin, command.args, {
+    const child = childProcess.spawn(command.bin, command.args, {
       detached: true,
       stdio: "ignore"
     });
+    const opened = await new Promise<boolean>((resolve) => {
+      const handleError = (): void => {
+        child.off("error", handleError);
+        resolve(false);
+      };
+
+      child.once("error", handleError);
+      setImmediate(() => {
+        child.off("error", handleError);
+        resolve(true);
+      });
+    });
+
     child.unref();
-    return true;
+
+    return opened;
   } catch {
     return false;
   }
@@ -638,42 +706,7 @@ export function createAuthLoginDefinition(context: AppContext): CommandDefinitio
           const timeoutMs = timeoutSeconds * 1000;
           const sessionState = randomBytes(24).toString("hex");
           const routePath = `/login/${randomBytes(12).toString("hex")}`;
-          let authMethods: AuthMethodsPayload = {
-            password: {
-              identityFields: ["identity"],
-              enabled: true
-            },
-            mfa: {
-              enabled: false
-            },
-            otp: {
-              enabled: false
-            }
-          };
-
-          if (initialBaseUrl) {
-            const client = new PocketBaseRemoteClient({
-              baseUrl: initialBaseUrl,
-              collection,
-              timeout: context.state.config.timeout ?? null
-            });
-
-            try {
-              const authMethodsResult = await client.recordAuthMethods(collection);
-              authMethods = authMethodsResult.data as AuthMethodsPayload;
-            } catch {
-              // Keep the fallback password-only form if auth-methods probing fails.
-            }
-          }
-
-          const identityFields = authMethods.password?.identityFields?.length
-            ? authMethods.password.identityFields
-            : ["email"];
-          const hasExtraSteps = Boolean(authMethods.mfa?.enabled || authMethods.otp?.enabled);
-          const identityLabel = formatIdentityLabel(identityFields);
-          const identityType =
-            identityFields.length === 1 && identityFields[0] === "email" ? "email" : "text";
-          const submitLabel = hasExtraSteps ? "Next" : "Login";
+          let loginPageView = buildLoginPageView(createDefaultAuthMethods());
           const historyParts = ["auth", "login"];
           if (options.baseUrl) {
             historyParts.push("--base-url", options.baseUrl);
@@ -695,6 +728,19 @@ export function createAuthLoginDefinition(context: AppContext): CommandDefinitio
           let settled = false;
           let launchUrl = "";
           let timeoutHandle: NodeJS.Timeout | null = null;
+          let finalizeLogin: Promise<void> | null = null;
+
+          const renderCurrentLoginPage = (pageOptions: {
+            baseUrl: string;
+            collection: string;
+            state: string;
+            identity?: string;
+            error?: string;
+          }): string =>
+            renderLoginPage({
+              ...pageOptions,
+              ...loginPageView
+            });
 
           const server = createServer(async (request, response) => {
             if (settled) {
@@ -712,14 +758,11 @@ export function createAuthLoginDefinition(context: AppContext): CommandDefinitio
               writeHtml(
                 response,
                 200,
-                renderLoginPage({
+                renderCurrentLoginPage({
                   baseUrl: initialBaseUrl,
                   collection,
                   state: sessionState,
-                  identity,
-                  identityLabel,
-                  identityType,
-                  submitLabel
+                  identity
                 })
               );
               return;
@@ -739,15 +782,12 @@ export function createAuthLoginDefinition(context: AppContext): CommandDefinitio
               writeHtml(
                 response,
                 413,
-                renderLoginPage({
+                renderCurrentLoginPage({
                   baseUrl: initialBaseUrl,
                   collection,
                   state: sessionState,
                   identity,
-                  error: error instanceof Error ? error.message : String(error),
-                  identityLabel,
-                  identityType,
-                  submitLabel
+                  error: error instanceof Error ? error.message : String(error)
                 })
               );
               return;
@@ -763,15 +803,12 @@ export function createAuthLoginDefinition(context: AppContext): CommandDefinitio
               writeHtml(
                 response,
                 400,
-                renderLoginPage({
+                renderCurrentLoginPage({
                   baseUrl: postedBaseUrl ?? initialBaseUrl,
                   collection,
                   state: sessionState,
                   identity: postedIdentity || identity,
-                  error: "This browser login session is invalid or expired.",
-                  identityLabel,
-                  identityType,
-                  submitLabel
+                  error: "This browser login session is invalid or expired."
                 })
               );
               return;
@@ -781,15 +818,12 @@ export function createAuthLoginDefinition(context: AppContext): CommandDefinitio
               writeHtml(
                 response,
                 400,
-                renderLoginPage({
+                renderCurrentLoginPage({
                   baseUrl: initialBaseUrl,
                   collection,
                   state: sessionState,
                   identity: postedIdentity || identity,
-                  error: "BaseUrl is required.",
-                  identityLabel,
-                  identityType,
-                  submitLabel
+                  error: "BaseUrl is required."
                 })
               );
               return;
@@ -802,15 +836,12 @@ export function createAuthLoginDefinition(context: AppContext): CommandDefinitio
               writeHtml(
                 response,
                 400,
-                renderLoginPage({
+                renderCurrentLoginPage({
                   baseUrl: postedBaseUrl,
                   collection,
                   state: sessionState,
                   identity: postedIdentity || identity,
-                  error: error instanceof Error ? error.message : String(error),
-                  identityLabel,
-                  identityType,
-                  submitLabel
+                  error: error instanceof Error ? error.message : String(error)
                 })
               );
               return;
@@ -820,15 +851,12 @@ export function createAuthLoginDefinition(context: AppContext): CommandDefinitio
               writeHtml(
                 response,
                 400,
-                renderLoginPage({
+                renderCurrentLoginPage({
                   baseUrl: postedBaseUrl,
                   collection,
                   state: sessionState,
                   identity: postedIdentity || identity,
-                  error: "Identity and password are required.",
-                  identityLabel,
-                  identityType,
-                  submitLabel
+                  error: "Identity and password are required."
                 })
               );
               return;
@@ -838,7 +866,7 @@ export function createAuthLoginDefinition(context: AppContext): CommandDefinitio
               const client = new PocketBaseRemoteClient({
                 baseUrl: validatedPostedBaseUrl,
                 collection,
-                timeout: context.state.config.timeout ?? null
+                timeout: timeoutSeconds
               });
               const result = await client.login({
                 identity: postedIdentity,
@@ -857,23 +885,24 @@ export function createAuthLoginDefinition(context: AppContext): CommandDefinitio
               if (timeoutHandle) {
                 clearTimeout(timeoutHandle);
               }
+              finalizeLogin = (async (): Promise<void> => {
+                const preflight = await runPreflightCheck(context, {
+                  requireAuth: true
+                });
+
+                emitSuccess({
+                  jsonOutput: context.jsonMode,
+                  action,
+                  message: preflight.ready
+                    ? "Remote auth login successful and preflight passed"
+                    : "Remote auth login successful but preflight reported issues",
+                  data: {
+                    auth: redactAuthResult(result),
+                    preflight
+                  }
+                });
+              })();
               server.close();
-
-              const preflight = await runPreflightCheck(context, {
-                requireAuth: true
-              });
-
-              emitSuccess({
-                jsonOutput: context.jsonMode,
-                action,
-                message: preflight.ready
-                  ? "Remote auth login successful and preflight passed"
-                  : "Remote auth login successful but preflight reported issues",
-                data: {
-                  auth: redactAuthResult(result),
-                  preflight
-                }
-              });
             } catch (error) {
               const message =
                 error instanceof PocketBaseRemoteError
@@ -884,15 +913,12 @@ export function createAuthLoginDefinition(context: AppContext): CommandDefinitio
               writeHtml(
                 response,
                 error instanceof PocketBaseRemoteError ? error.status : 500,
-                renderLoginPage({
+                renderCurrentLoginPage({
                   baseUrl: postedBaseUrl ?? initialBaseUrl,
                   collection,
                   state: sessionState,
                   identity: postedIdentity,
-                  error: message,
-                  identityLabel,
-                  identityType,
-                  submitLabel
+                  error: message
                 })
               );
             }
@@ -917,38 +943,64 @@ export function createAuthLoginDefinition(context: AppContext): CommandDefinitio
           }
 
           launchUrl = `http://127.0.0.1:${address.port}${routePath}`;
-          const autoOpened = options.open !== false ? tryOpenBrowser(launchUrl) : false;
+          if (initialBaseUrl) {
+            void probeAuthMethods({
+              baseUrl: initialBaseUrl,
+              collection,
+              timeoutSeconds
+            }).then((probedAuthMethods): void => {
+              if (probedAuthMethods) {
+                loginPageView = buildLoginPageView(probedAuthMethods);
+              }
+            });
+          }
+
+          const autoOpened = options.open !== false ? await tryOpenBrowser(launchUrl) : false;
           writeLaunchMessage({
             url: launchUrl,
             autoOpened,
             timeoutSeconds
           });
 
-          await new Promise<void>((resolve, reject) => {
-            timeoutHandle = setTimeout(() => {
-              if (!settled) {
-                settled = true;
-                server.close();
-                reject(
-                  new Error(
-                    `Browser login timed out after ${timeoutSeconds} seconds. Re-run the command to start a new session.`
-                  )
-                );
-              }
-            }, timeoutMs);
+          try {
+            await new Promise<void>((resolve, reject) => {
+              timeoutHandle = setTimeout(() => {
+                if (!settled) {
+                  settled = true;
+                  server.close();
+                  reject(
+                    new Error(
+                      `Browser login timed out after ${timeoutSeconds} seconds. Re-run the command to start a new session.`
+                    )
+                  );
+                }
+              }, timeoutMs);
 
-            server.on("close", () => {
-              if (settled) {
-                resolve();
-              }
+              server.on("close", () => {
+                if (settled) {
+                  resolve();
+                }
+              });
             });
-          }).catch((error) => {
+          } catch (error) {
             emitError({
               jsonOutput: context.jsonMode,
               action,
               message: error instanceof Error ? error.message : String(error)
             });
-          });
+          }
+
+          if (finalizeLogin) {
+            try {
+              await finalizeLogin;
+            } catch (error) {
+              emitError({
+                jsonOutput: context.jsonMode,
+                action,
+                message: error instanceof Error ? error.message : String(error)
+              });
+            }
+          }
         })
   };
 }

@@ -94,6 +94,28 @@ describe("sanitizeHistoryTokens", () => {
         "--with-auth"
       ])
     ).toBe("raw GET /api/files/users/rec1/avatar.png?<redacted>#<redacted> --with-auth");
+    expect(
+      sanitizeHistoryTokens([
+        "records",
+        "auth-password",
+        "users",
+        "admin@example.com",
+        "Secret123",
+        "--fields",
+        "id,email"
+      ])
+    ).toBe("records auth-password users admin@example.com ******** --fields id,email");
+    expect(
+      sanitizeHistoryTokens([
+        "records",
+        "auth-otp",
+        "users",
+        "otp-id",
+        "654321",
+        "--mfa-id",
+        "mfa_123"
+      ])
+    ).toBe("records auth-otp users otp-id ******** --mfa-id mfa_123");
   });
 });
 

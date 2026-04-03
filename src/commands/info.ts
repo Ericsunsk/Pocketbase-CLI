@@ -8,7 +8,11 @@ import {
 } from "../app/context";
 import type { CommandDefinition } from "../contract/command-registry";
 import { emitSuccess } from "../core/output";
-import { PocketBaseRemoteClient, PocketBaseRemoteError } from "../http/remote-client";
+import {
+  PocketBaseRemoteClient,
+  PocketBaseRemoteError,
+  sanitizeRemoteValue
+} from "../http/remote-client";
 import { parseBaseUrlValue } from "../input/validators";
 
 async function probeHealth(context: AppContext): Promise<Record<string, unknown> | null> {
@@ -92,7 +96,7 @@ export function createInfoDefinition(context: AppContext): CommandDefinition {
               authenticated: context.state.hasRemoteAuth(),
               base_url: remoteAuth.base_url ?? null,
               collection: remoteAuth.collection ?? null,
-              record: remoteAuth.record ?? null
+              record: sanitizeRemoteValue(remoteAuth.record ?? null)
             },
             health: await probeHealth(context)
           };

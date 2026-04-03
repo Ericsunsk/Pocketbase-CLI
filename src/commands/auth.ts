@@ -10,7 +10,7 @@ import {
 } from "../app/context";
 import type { CommandDefinition } from "../contract/command-registry";
 import { createOptionParameter } from "../contract/metadata";
-import { emitSuccess } from "../core/output";
+import { emitError, emitSuccess } from "../core/output";
 import { PocketBaseRemoteError } from "../http/remote-client";
 import { redactAuthResult, saveRemoteAuthResult } from "./auth-support";
 import { createAuthLoginDefinition } from "./auth-browser";
@@ -57,6 +57,17 @@ function createAuthLogoutDefinition(context: AppContext): CommandDefinition {
         .description("Clear saved remote auth state")
         .option("--yes", "Skip interactive logout confirmation")
         .action(async (options: { yes?: boolean }) => {
+          if (context.jsonMode && !options.yes) {
+            emitError({
+              jsonOutput: context.jsonMode,
+              action: "auth.logout",
+              message: "JSON mode requires `auth logout --yes` to clear the saved auth session.",
+              errorType: "confirmation_required",
+              hint:
+                "Re-run `auth logout --yes` after confirming the local saved auth session should be cleared."
+            });
+          }
+
           if (!options.yes && !context.jsonMode) {
             const confirmed = await confirmLogout();
             if (!confirmed) {

@@ -1,7 +1,10 @@
 import type { AppContext } from "../app/context";
 import { saveContextState } from "../app/context";
 import { emitError } from "../core/output";
-import type { RemoteResult } from "../http/remote-client";
+import {
+  sanitizeRemoteResult,
+  type RemoteResult
+} from "../http/remote-client";
 
 export function extractAuthPayload(
   result: RemoteResult<unknown>,
@@ -66,17 +69,5 @@ export async function saveRemoteAuthResult(
 export function redactAuthResult<TData>(
   result: RemoteResult<TData>
 ): RemoteResult<TData | Record<string, unknown>> {
-  const payload =
-    result.data && typeof result.data === "object" && !Array.isArray(result.data)
-      ? { ...(result.data as Record<string, unknown>) }
-      : null;
-
-  if (payload && typeof payload.token === "string") {
-    payload.token = "********";
-  }
-
-  return {
-    ...result,
-    data: (payload ?? result.data) as TData | Record<string, unknown>
-  };
+  return sanitizeRemoteResult(result) as RemoteResult<TData | Record<string, unknown>>;
 }

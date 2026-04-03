@@ -9,7 +9,7 @@ import {
   createOptionParameter
 } from "../contract/metadata";
 import { emitError, emitSuccess } from "../core/output";
-import { PocketBaseRemoteError } from "../http/remote-client";
+import { PocketBaseRemoteError, sanitizeRemoteResult } from "../http/remote-client";
 import { loadOptionalJsonObjectInput } from "../input/json-input";
 import { buildRemoteClient } from "./support";
 
@@ -139,7 +139,7 @@ export function createRawDefinition(context: AppContext): CommandDefinition {
               jsonOutput: context.jsonMode,
               action: "raw",
               message: "Raw request completed",
-              data: result
+              data: sanitizeRemoteResult(result)
             });
           } catch (error) {
             if (error instanceof PocketBaseRemoteError) {

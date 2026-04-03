@@ -195,8 +195,20 @@ export function sanitizeHistoryTokens(tokens: string[]): string {
   const rendered = [...tokens];
   const subcommand = tokens[1];
 
-  if ((subcommand === "auth-password" || subcommand === "auth-otp") && tokens.length >= 5) {
-    rendered[rendered.length - 1] = "********";
+  if (subcommand === "auth-password") {
+    redactPositionalValue(rendered, {
+      startIndex: 2,
+      position: 2,
+      optionsWithValues: new Set(["--identity-field", "--fields", "--expand", "--mfa-id"]),
+      flags: new Set(["--no-save"])
+    });
+  } else if (subcommand === "auth-otp") {
+    redactPositionalValue(rendered, {
+      startIndex: 2,
+      position: 2,
+      optionsWithValues: new Set(["--fields", "--expand", "--mfa-id"]),
+      flags: new Set(["--no-save"])
+    });
   } else if (subcommand === "auth-oauth2") {
     for (let index = 0; index < rendered.length - 1; index += 1) {
       if (
@@ -221,6 +233,38 @@ export function sanitizeHistoryTokens(tokens: string[]): string {
   }
 
   return rendered.join(" ");
+}
+
+function redactPositionalValue(
+  tokens: string[],
+  options: {
+    startIndex: number;
+    position: number;
+    optionsWithValues: Set<string>;
+    flags: Set<string>;
+  }
+): void {
+  let positionalIndex = 0;
+
+  for (let index = options.startIndex; index < tokens.length; index += 1) {
+    const token = tokens[index];
+
+    if (options.optionsWithValues.has(token)) {
+      index += 1;
+      continue;
+    }
+
+    if (options.flags.has(token) || token.startsWith("--")) {
+      continue;
+    }
+
+    if (positionalIndex === options.position) {
+      tokens[index] = "********";
+      return;
+    }
+
+    positionalIndex += 1;
+  }
 }
 
 class JsonModeLineReader {
